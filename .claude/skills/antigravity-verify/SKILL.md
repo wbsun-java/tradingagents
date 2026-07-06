@@ -48,8 +48,9 @@ Reference: `docs/superpowers/specs/2026-07-06-codex-delegate-workflow-design.md`
 4. **Decide:**
    - **Pass** -> proceed to reporting the feature done to the user.
    - **Fail, and it's a real bug** -> write a new plan task describing the
-     bug and its fix criteria, and run it through `codex-delegate`. Then
-     re-run this skill once that task passes.
+     bug, its fix criteria, and its own verification command (same
+     requirement `codex-delegate` expects of any task), and run it through
+     `codex-delegate`. Then re-run this skill once that task passes.
    - **Fail, but inconclusive or environmental** (e.g. missing API key,
      unrelated flake) -> resolve the ambiguity yourself or ask the user. Do
      not loop this skill repeatedly on the same check.
@@ -59,5 +60,9 @@ Reference: `docs/superpowers/specs/2026-07-06-codex-delegate-workflow-design.md`
 - Antigravity only observes behavior in this workflow; it does not edit
   repository files here even though `agy` itself is capable of more.
 - Never use `--dangerously-skip-permissions`.
-- A failure here always produces a stage-3 task (via `codex-delegate`), never
-  a direct edit by Claude or Antigravity.
+- A failure that indicates a real bug always produces a stage-3 task (via
+  `codex-delegate`), never a direct edit by Claude or Antigravity;
+  inconclusive or environmental failures are resolved directly instead (see
+  Procedure step 4), not routed anywhere.
+- This skill never commits or pushes on its own — same rule as
+  `codex-delegate`.

@@ -76,3 +76,5 @@ Reference: `docs/superpowers/specs/2026-07-06-codex-delegate-workflow-design.md`
 - Retry cap is 3 attempts per task, not per feature.
 - Never hand-edit files inside Codex's scope for this task.
 - Never bypass approvals/sandbox to "get it working."
+- This skill never commits or pushes on its own — the task's own commit (if
+  any) still needs the user's explicit approval, same as any other change.
