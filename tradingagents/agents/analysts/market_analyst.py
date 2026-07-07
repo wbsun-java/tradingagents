@@ -1,10 +1,12 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.utils.agent_utils import (
+    get_chart_patterns,
     get_indicators,
     get_instrument_context_from_state,
     get_language_instruction,
     get_stock_data,
+    get_trend_template,
     get_verified_market_snapshot,
 )
 
@@ -19,6 +21,8 @@ def create_market_analyst(llm):
             get_stock_data,
             get_indicators,
             get_verified_market_snapshot,
+            get_chart_patterns,
+            get_trend_template,
         ]
 
         system_message = (
@@ -49,6 +53,10 @@ Volume-Based Indicators:
 - Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names.
 
 Before writing the final report, call get_verified_market_snapshot for this ticker and the current date, and treat it as the source of truth for any exact OHLCV, price-level, or indicator-value claim. If another tool's output conflicts with the verified snapshot, flag the discrepancy rather than inventing a reconciled number. Do not claim historical validation, support/resistance bounces, or exact percentage moves unless they are directly supported by tool output with concrete dates and prices.
+
+Also call get_chart_patterns for the ticker and current date before the final report. Treat its deterministic output as the source of truth for W bottoms (double bottoms), M tops (double tops), rectangles, triangles, support/resistance, and breakouts. Clearly distinguish `forming`, `confirmed`, and `failed` patterns. A forming pattern is a watch condition, not a trade signal. Report the calculated confirmation, target, and invalidation levels; do not invent additional visual patterns from the raw CSV. For triangles, report `breakout_progress`: the preferred breakout zone is roughly 55%-75% of the base-to-apex distance (around two-thirds), while a `late_apex_breakout` above 85% carries elevated false-break risk and must reduce conviction. Do not penalize an earlier breakout solely for its timing; note that the structure may evolve into a different pattern and should be re-evaluated. Use volume confirmation and other indicators as supporting context rather than as substitutes for geometric confirmation.
+
+Also call get_trend_template for the ticker and current date. It scores the stock against Minervini's 8-point trend template (moving-average stacking, 52-week high/low position, and a relative-strength proxy versus a benchmark index) and reports how many of the 8 criteria pass. This is a technical-stage filter, not a buy signal: a stock passing all 8 is in what Minervini calls a "stage 2" uptrend, which is a favorable backdrop for bullish setups, while failing most criteria signals a weak or declining stage. Report the pass count and which specific criteria failed; do not treat a high pass count alone as a trade recommendation.
 
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""

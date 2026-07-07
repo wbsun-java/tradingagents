@@ -15,6 +15,7 @@ from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_balance_sheet,
     get_cashflow,
+    get_chart_patterns,
     get_fundamentals,
     get_global_news,
     get_income_statement,
@@ -24,6 +25,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_news,
     get_prediction_markets,
     get_stock_data,
+    get_trend_template,
     get_verified_market_snapshot,
     resolve_instrument_identity,
 )
@@ -171,6 +173,10 @@ class TradingAgentsGraph:
                     # LLM and required by its prompt; must be executable here or
                     # the call fails and the model reports it "unavailable").
                     get_verified_market_snapshot,
+                    # Deterministic classical chart-pattern analysis.
+                    get_chart_patterns,
+                    # Minervini trend template (moving-average stage filter).
+                    get_trend_template,
                 ]
             ),
             "social": ToolNode(

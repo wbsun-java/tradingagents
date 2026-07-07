@@ -72,7 +72,7 @@ Our framework decomposes complex trading tasks into specialized roles.
 - Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
 - Sentiment Analyst: Aggregates news headlines, StockTwits, and Reddit chatter into a single sentiment read to gauge short-term market mood.
 - News Analyst: Monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
-- Technical Analyst: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
+- Technical Analyst: Combines indicators (such as MACD, RSI, moving averages, Bollinger Bands, and ATR) with deterministic classical-chart analysis for support/resistance breaks, double bottoms/tops, rectangles, and ascending, descending, or symmetrical triangles. Pattern output distinguishes forming, confirmed, and failed setups and includes target and invalidation levels.
 
 <p align="center">
   <img src="assets/analyst.png" width="100%" style="display: inline-block; margin: 0 2%;">
