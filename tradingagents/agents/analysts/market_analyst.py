@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_stock_data,
     get_trend_template,
     get_verified_market_snapshot,
+    get_wyckoff_structure,
 )
 
 
@@ -23,6 +24,7 @@ def create_market_analyst(llm):
             get_verified_market_snapshot,
             get_chart_patterns,
             get_trend_template,
+            get_wyckoff_structure,
         ]
 
         system_message = (
@@ -58,8 +60,10 @@ Also call get_chart_patterns for the ticker and current date before the final re
 
 Also call get_trend_template for the ticker and current date. It scores the stock against Minervini's 8-point trend template (moving-average stacking, 52-week high/low position, and a relative-strength proxy versus a benchmark index) and reports how many of the 8 criteria pass. This is a technical-stage filter, not a buy signal: a stock passing all 8 is in what Minervini calls a "stage 2" uptrend, which is a favorable backdrop for bullish setups, while failing most criteria signals a weak or declining stage. Report the pass count and which specific criteria failed; do not treat a high pass count alone as a trade recommendation.
 
+Also call get_wyckoff_structure for the ticker and current date before the final report. It deterministically reads the stock's Wyckoff accumulation/distribution structure: the current consolidation range, the classical events found inside it (selling/buying climax, automatic rally/reaction, secondary test, spring/upthrust, sign of strength/weakness, last point of support/supply), the resulting phase (A through E), and a `phase_bias` (bullish/bearish/neutral). Treat this as the primary technical read and write it as its own section before other technical evidence: state the phase, cite the specific events with their dates and prices, and give the `dominant_weight` value. Apply this rule when synthesizing the report's overall technical conclusion: when `phase_bias` is bullish or bearish, the chart-pattern, trend-template, and indicator evidence may only adjust conviction within that same direction — they must not flip the technical conclusion to the opposite direction. If that other evidence strongly conflicts with the Wyckoff read, say so explicitly, but still lead the technical conclusion with the Wyckoff direction. When `phase_bias` is neutral (including no clear range in the lookback window), treat the other technical evidence normally, without this constraint. Do not invent Wyckoff events beyond what the tool reports.
+
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read, including a row for the Wyckoff phase, phase_bias, and dominant_weight."""
             + get_language_instruction()
         )
 

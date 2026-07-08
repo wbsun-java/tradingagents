@@ -53,19 +53,20 @@ ATR + 交易区间探测（wyckoff_range）
 ### 交易区间探测（`wyckoff_range.py`）
 
 - 复用与 `chart_patterns.py` 一致的枢轴点检测（中心窗口确认局部高低点，默认 `pivot_span=3`）。
-- 在回看窗口内寻找价格反复在一个相对稳定的高低边界之间震荡的区段：边界宽度需达到最低 ATR 倍数门槛，且区间内至少各有两次有效触碰上下边界。
+- 在回看窗口内寻找价格反复在一个相对稳定的高低边界之间震荡的区段：边界宽度需达到最低 ATR 倍数门槛，且区间内至少各有两次有效触碰上下边界。高、低边界的两组触点还必须在时间上有重叠（不能一组触点全部早于另一组），否则会把两个不同时期、互不相关的价位误配成同一个区间——实现过程中发现并修复了这个问题。
 - 标记区间的 `start_date`、`range_high`、`range_low`，以及成交量高潮候选点（单日成交量显著高于此前 20 日均量，且伴随价格大幅波动）——这些候选点是后续 SC/BC 判定的输入，不在本模块直接下结论。
 - 若窗口内找不到满足条件的区间，返回 `kind = "none"`，交由 `wyckoff_bias` 统一处理为中性。
+- 判断一个区间"现在是否仍然有效"，用的是**当前收盘价与区间边界的距离**（不超过一个区间高度的缓冲），而不是"最近一次有效触碰枢轴点距今多少天"。吸筹/派发过程本身就会有长时间没有新极值出现的安静阶段（横盘等待），如果用触碰新枢轴点的时间来判断区间是否"过期"，会把仍然有效、只是暂时安静的结构错误地丢弃成 `neutral`。早期实现里确实这样做过（触碰点必须落在窗口最后约 60 个交易日内），后来改成价格邻近度判断。
 
 ### 吸筹事件识别（`wyckoff_accumulation.py`）
 
 在已识别的候选区间基础上，按时间顺序尝试匹配以下经典事件，每个事件都有独立的量价判据：
 
 - **PS（Preliminary Support，初步支撑）：** 下跌趋势中首次出现明显放量企稳。
-- **SC（Selling Climax，抛售高潮）：** 加速下跌后出现的极端放量（相对 20 日均量的比值门槛）长下影或收盘明显回升。
+- **SC（Selling Climax，抛售高潮）：** 加速下跌后出现的极端放量（相对 20 日均量的比值门槛）长下影或收盘明显回升。搜索范围是区间起点前后一段窗口内的**原始 K 线**，而不是只在已经聚类成区间边界的枢轴点里找——真实的抛售高潮经常发生在区间真正稳定下来之前，价格往往还会再多跌几天才见底，导致高潮那根 K 线的价位和最终区间边界有一段距离、不会被聚类进边界触点，如果只在边界触点里找就会漏掉（实现过程中通过真实行情复盘发现并修复了这个问题）。窗口内如果有多根 K 线都满足放量门槛，取**时间上最早**的一根，而不是成交量最大的一根——SC 的定义是"启动这个区间的那根 K 线"，如果按成交量选，后面 Phase C 里一根放量更夸张的 Spring/Terminal Shakeout 反而会被误判成 SC（合成数据测试发现的问题）。
 - **AR（Automatic Rally，自动反弹）：** SC 之后的快速反弹，反弹高点初步定义区间上沿候选。
 - **ST（Secondary Test，二次测试）：** 价格回落重新靠近 SC 附近区域，但成交量和跌幅小于 SC，验证支撑有效。
-- **Spring / Terminal Shakeout：** 价格短暂跌破区间下沿（超出 ATR 缓冲），随后收盘收回区间内，且跌破阶段成交量低于区间内平均水平（缩量假跌破，与 `false_breakdown_long` 的量能逻辑呼应但语境不同）。
+- **Spring / Terminal Shakeout：** 价格短暂跌破区间下沿（超出 ATR 缓冲），随后收盘收回区间内。Spring 和 Terminal Shakeout 是同一类 Phase C 测试的两种不同表现，不能用统一的"缩量"描述：Spring 通常缩量（安静吸筹，不引人注意）；Terminal Shakeout 则往往是放量的剧烈震仓（用力洗出浮筹）。两种量能特征都是合法的 Phase C 确认，工具输出的证据文字必须明确说明该次跌破属于哪一种，而不是笼统地假设一定缩量（早期实现里就是这个假设，被真实行情复盘推翻——NKE 2026-07-01 那次 spring 是 3.1 倍放量的 Terminal Shakeout，不是缩量 Spring）。
 - **Test：** Spring 之后再次靠近区间下沿但不再创新低、量能进一步萎缩。
 - **SOS（Sign of Strength，强势信号）：** 放量向上突破区间上沿，或区间内出现放量长阳线且收盘接近最高点。
 - **LPS（Last Point of Support，最后支撑点）：** SOS 之后价格回调但不跌破新支撑（原区间上沿或 SOS 低点），缩量。
@@ -165,13 +166,17 @@ Market Analyst 必须：
 
 ```text
 tradingagents/dataflows/wyckoff_range.py
-    共享交易区间探测（区间高低边界、成交量高潮候选点）
+    共享交易区间探测（区间高低边界、成交量高潮候选点），复用 chart_patterns.py 的 Pivot/find_pivots
+
+tradingagents/dataflows/wyckoff_events.py
+    吸筹/派发共享的方向参数化事件识别引擎（实现过程中从两侧抽出，避免镜像逻辑重复两遍）：
+    PS/PSY, SC/BC, AR, ST, Spring/UTAD, Test, SOS/SOW, LPS/LPSY, BU/UT + Phase A-E 判定 + confidence 评分
 
 tradingagents/dataflows/wyckoff_accumulation.py
-    吸筹侧事件识别：PS, SC, AR, ST, Spring, Test, SOS, LPS, BU + Phase A-E 判定
+    吸筹侧薄封装：仅在 prior_trend == "down" 时调用 wyckoff_events 并打上 accumulation 标签
 
 tradingagents/dataflows/wyckoff_distribution.py
-    派发侧事件识别（镜像逻辑）：PSY, BC, AR, ST, UTAD, SOW, LPSY, UT + Phase A-E 判定
+    派发侧薄封装：仅在 prior_trend == "up" 时调用 wyckoff_events 并打上 distribution 标签
 
 tradingagents/dataflows/wyckoff_bias.py
     汇总吸筹/派发两侧结果，输出最终 phase_bias / confidence / dominant_weight
@@ -187,6 +192,12 @@ tradingagents/agents/analysts/market_analyst.py
 
 tradingagents/graph/trading_graph.py
     market ToolNode 注册
+
+tests/test_wyckoff_range.py
+    共享交易区间探测的合成 OHLCV 单元测试
+
+tests/test_wyckoff_events.py
+    共享事件引擎的证据文字单元测试（放量/缩量 Spring 的证据文字区分）
 
 tests/test_wyckoff_accumulation.py
     吸筹侧合成 OHLCV 单元测试
@@ -205,8 +216,9 @@ tests/test_market_toolnode.py
 
 测试使用合成 OHLCV，避免网络行情变化影响算法验证。
 
-- 交易区间探测：能在震荡区间中识别出高低边界；纯趋势行情（无震荡）应返回 `kind = "none"`。
-- 吸筹侧：构造教科书式序列（SC→AR→ST→Spring→Test→SOS→LPS）应按顺序识别全部事件，且 `current_phase` 推进到 D 或 E；只构造到 Spring 为止的序列应停在 Phase C；没有放量佐证的候选点不得被识别为 SC/Spring/SOS。
+- 交易区间探测：能在震荡区间中识别出高低边界；纯趋势行情（无震荡）应返回 `kind = "none"`。长时间横盘、没有新枢轴点触碰但价格仍在区间附近时，区间不应失效；价格已经远离区间（超过一个区间高度）之后，旧区间不应再被识别为当前有效结构。
+- 吸筹侧：构造教科书式序列（SC→AR→ST→Spring→Test→SOS→LPS）应按顺序识别全部事件，且 `current_phase` 推进到 D 或 E；只构造到 Spring 为止的序列应停在 Phase C；没有放量佐证的候选点不得被识别为 SC/Spring/SOS；抛售高潮价位偏离最终区间边界（不在边界聚类触点内）时依然应该被识别为 SC；窗口内有更晚、成交量更夸张的候选（例如放量 Spring）时，仍应选时间上最早的一根作为 SC。
+- 事件引擎：放量 Spring/UTAD 的证据文字必须提示"剧烈震仓"，缩量的必须提示"安静吸筹"，不能只报数字不给解读。
 - 派发侧：镜像用例（BC→AR→ST→UTAD→SOW→LPSY），断言同上。
 - 汇总逻辑：两侧都无区间时输出 `neutral` 且 `dominant_weight` 仍然返回；只有一侧识别到区间时采用该侧结果；`confidence` 随事件数量与质量单调变化的基本合理性检查。
 - 分析日期之后的数据不得参与识别结果（未来数据泄漏检查，做法与 `test_chart_patterns.py` 一致）。
@@ -223,14 +235,27 @@ tests/test_market_toolnode.py
 
 ## 当前实施状态
 
-- [ ] 交易区间探测（`wyckoff_range.py`）
-- [ ] 吸筹侧事件识别与 Phase 判定（`wyckoff_accumulation.py`）
-- [ ] 派发侧事件识别与 Phase 判定（`wyckoff_distribution.py`）
-- [ ] 方向/置信度/权重汇总（`wyckoff_bias.py`）
-- [ ] LangChain 工具包装（`wyckoff_tools.py`）
-- [ ] Market Analyst 与 market ToolNode 接入
-- [ ] 合成行情单元测试（区间探测、吸筹、派发、汇总、ToolNode 接线）
-- [ ] 完整项目回归测试（`pytest -q` + `ruff check .`）
+- [x] 交易区间探测（`wyckoff_range.py`，含高低触点时间重叠约束）
+- [x] 吸筹/派发共享事件识别引擎（`wyckoff_events.py`）
+- [x] 吸筹侧事件识别与 Phase 判定（`wyckoff_accumulation.py`）
+- [x] 派发侧事件识别与 Phase 判定（`wyckoff_distribution.py`）
+- [x] 方向/置信度/权重汇总（`wyckoff_bias.py`）
+- [x] LangChain 工具包装（`wyckoff_tools.py`）
+- [x] Market Analyst 与 market ToolNode 接入
+- [x] 合成行情单元测试（区间探测、吸筹、派发、汇总、ToolNode 接线）
+- [x] 完整项目回归测试（`pytest -q` + `ruff check .`）
+
+验证结果：
+
+```text
+新增 Wyckoff 测试：20 passed（区间 5、事件引擎 2、吸筹 5、派发 4、汇总 4，另加 test_market_toolnode.py 接线断言更新）
+完整测试：544 passed, 2 skipped（跳过项与本次改动无关：langchain_aws 未安装、DEEPSEEK_API_KEY 未设置）
+ruff check .：All checks passed
+
+真实行情复盘（2026-07-07，抽样，共两轮）：
+第一轮（修复 SC 搜索范围后）：AAPL/COIN/NKE 识别为 accumulation，TSLA/NVDA/GOOGL/PLTR 识别为 distribution；QQQ（两年阶梯式上涨，非典型横盘）、AMD/META/AMZN/NFLX/MSFT 仍为 neutral，符合"没有清晰吸筹/派发结构时不得强行给方向"的原则。
+第二轮（用户指出 NKE 2026-07-01 的放量 Spring 证据文字没有体现量能特征后）：修复 SC 时间优先级 + Spring/UTAD 证据文字量能感知，NKE 正确报告"3.1 倍放量的 Terminal Shakeout"；部分标的的具体 Phase 因 SC 选取更准确而调整（如 TSLA C→E、COIN C→A），方向本身保持稳定。
+```
 
 ## 后续迭代
 

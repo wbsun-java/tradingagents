@@ -27,6 +27,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_stock_data,
     get_trend_template,
     get_verified_market_snapshot,
+    get_wyckoff_structure,
     resolve_instrument_identity,
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
@@ -177,6 +178,8 @@ class TradingAgentsGraph:
                     get_chart_patterns,
                     # Minervini trend template (moving-average stage filter).
                     get_trend_template,
+                    # Wyckoff accumulation/distribution structure read.
+                    get_wyckoff_structure,
                 ]
             ),
             "social": ToolNode(
