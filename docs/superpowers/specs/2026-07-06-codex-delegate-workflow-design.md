@@ -24,8 +24,19 @@ specifically.
 
 ## Architecture
 
-Five stages. Stages 1 and 2 reuse existing superpowers skills unchanged; stages 3
-and 4 are new; stage 5 is the existing git-safety reporting behavior.
+Five numbered stages, plus one situational pre-step. Stages 1 and 2 reuse
+existing superpowers skills unchanged; stage 3 is the delegate loop; stage
+4 is finalized below; stage 5 is the existing git-safety reporting
+behavior.
+
+**Gemini intake** (situational, not a numbered stage) -> only runs when
+the input to stage 1 is messy raw material (a log dump, a rambling note,
+an external doc/ticket) rather than an already-clear request. Gemini
+(via `agy --print`) turns it into a structured brief — Problem,
+Facts/constraints, Open questions — which becomes stage 1's starting
+material instead of the raw input. Gemini never proposes architecture or
+makes design decisions; decision-making stays with Claude. See
+`.claude/skills/gemini-intake/SKILL.md`.
 
 1. **Brainstorm** (`superpowers:brainstorming`) -> design spec under
    `docs/superpowers/specs/`.
@@ -35,15 +46,13 @@ and 4 are new; stage 5 is the existing git-safety reporting behavior.
 3. **Delegate** (new) -> for each plan task, Claude drives a Codex CLI turn that
    writes the module and its tests and self-verifies, then Claude independently
    re-verifies and reviews.
-4. **End-to-end verify** (new) -> once all plan tasks for the feature pass stage 3,
-   Claude drives an Antigravity CLI (`agy`) turn that actually runs the
-   `tradingagents` CLI (or the relevant entry point) against a real or mocked
-   ticker and confirms the feature behaves correctly in practice — catching the
-   gap between "unit tests green" and "feature actually works" that stage 3 alone
-   doesn't cover.
+4. **End-to-end verify** (finalized) -> once all plan tasks for the
+   feature pass stage 3, Claude builds a verification scenario and hands
+   it to the user by default (Antigravity is an opt-in fallback) — see the
+   rewritten stage-4 section below for the full rule.
 5. **Report** -> Claude summarizes the diff and both verification results (unit +
-   end-to-end) to the user. Nothing is committed without explicit user approval
-   (existing git safety protocol is unchanged).
+   end-to-end) to the user. Nothing is committed without explicit user
+   approval (existing git safety protocol is unchanged).
 
 ## Delegate loop (stage 3 detail)
 
@@ -77,47 +86,56 @@ For each task in the plan, in task order:
 
 ## End-to-end verify loop (stage 4 detail)
 
-Runs once, after all of a feature's plan tasks have passed stage 3 (not per-task —
-unit-level correctness is already covered there; this stage checks the assembled
-feature actually works end-to-end).
+Runs once, after all of a feature's plan tasks have passed stage 3 (not
+per-task — unit-level correctness is already covered there; this stage
+checks the assembled feature actually works end-to-end).
 
-1. Claude constructs a verification prompt: what scenario to exercise (e.g. "run
-   `tradingagents` for ticker X on date Y with the relevant analyst enabled" or
-   "invoke `TradingAgentsGraph.propagate(...)` directly for a faster check"), what
-   output to inspect (CLI output, generated report content, specific fields), and
-   what "correct" looks like per the original design spec's acceptance criteria.
-2. Claude invokes Antigravity non-interactively:
+1. Claude constructs a verification scenario: what to run (e.g. "run
+   `tradingagents` for ticker X on date Y with the relevant analyst
+   enabled" or "invoke `TradingAgentsGraph.propagate(...)` directly for a
+   faster check"), what output to inspect, and what "correct" looks like
+   per the original design spec's acceptance criteria.
+2. **Default: hand off to the user.** Claude presents the exact commands
+   to run and exact expected output, and asks the user to run it and
+   report back pass/fail plus any discrepancy.
+3. **Opt-in fallback: Antigravity.** Only on explicit user request, Claude
+   invokes Antigravity non-interactively:
    ```
    agy --print "<verification prompt>" --add-dir <repo-root> --model "<model>"
    ```
    Never with `--dangerously-skip-permissions`. A specific model is chosen
-   deliberately (see Guardrails) rather than left to default, since this stage's
-   value comes partly from getting an independent model's read on the behavior.
-3. Antigravity runs the app/scenario, observes actual output, and reports back
-   pass/fail plus any discrepancies from expected behavior.
+   deliberately rather than left to default. **Hard rule:** never route a
+   scenario requiring interactive CLI/TUI driving (e.g. `tradingagents`'
+   questionary prompts) through `agy`, even if the opt-in was requested —
+   confirmed capability gap, not a preference: `agy --print` loops on
+   planner turns (`PlannerResponse without ModifiedResponse encountered`)
+   until `--print-timeout` and never completes such a scenario. Hand those
+   to the user regardless.
 4. **Pass** -> proceed to stage 5 (report to user).
-   **Fail** -> Claude reviews Antigravity's findings; if they point to a real bug,
-   that becomes a new task fed back into stage 3 (Codex fixes it, re-verify),
-   carrying its own verification command like any stage-3 task, not
-   something Claude or Antigravity patches directly. If findings are inconclusive
-   or environment-related (e.g. missing API key), Claude resolves the ambiguity
-   itself or asks the user, rather than looping stage 4 indefinitely.
-5. Same rule as stage 3: Claude does not hand-edit code based on Antigravity's
-   findings — findings become plan tasks routed back through Codex.
+   **Fail** -> Claude reviews the findings; if they point to a real bug,
+   that becomes a new task fed back into stage 3 (Codex fixes it,
+   re-verify), carrying its own verification command like any stage-3
+   task. If findings are inconclusive or environment-related (e.g.
+   missing API key), Claude resolves the ambiguity itself or asks the
+   user, rather than looping stage 4 indefinitely.
+5. Claude does not hand-edit code based on findings from this stage —
+   findings become plan tasks routed back through Codex.
 
 ## Guardrails
 
 - Codex sandbox is always `-s workspace-write`. Never
   `--dangerously-bypass-approvals-and-sandbox`.
-- Antigravity is invoked without `--dangerously-skip-permissions`, and only to
-  *observe* behavior (run the app, read output) — it does not edit repository
-  files as part of this workflow, so its role stays verification-only even though
-  `agy` itself is capable of more.
-- Antigravity's model is chosen explicitly per invocation rather than left as
-  whatever the CLI defaults to, since stage 4's value depends on getting a
-  meaningfully independent read on the feature (available options include Gemini
-  3.5/3.1 and non-Gemini models via the same CLI, so "independent" is a real
-  choice, not just cosmetic).
+- Stage 4's default path is the user running the scenario themselves;
+  Antigravity is opt-in, invoked only on explicit user request.
+- When Antigravity is used, it's invoked without
+  `--dangerously-skip-permissions`, and only to *observe* behavior (run the
+  app, read output) — it does not edit repository files as part of this
+  workflow. Its model is chosen explicitly per invocation rather than left
+  as whatever the CLI defaults to.
+- Never route an interactive-CLI/TUI-driving scenario through `agy`,
+  regardless of whether the Antigravity opt-in was requested — hand those
+  to the user. This is a confirmed capability gap (see stage 4 detail),
+  not a style preference.
 - Retry cap of 3 per task prevents runaway loops in stage 3; failures beyond that
   surface to the user. Stage 4 does not loop on itself — a genuine-bug failure
   there always produces a new stage-3 task (routed through Codex) rather than
