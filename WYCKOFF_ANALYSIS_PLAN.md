@@ -257,10 +257,31 @@ ruff check .：All checks passed
 第二轮（用户指出 NKE 2026-07-01 的放量 Spring 证据文字没有体现量能特征后）：修复 SC 时间优先级 + Spring/UTAD 证据文字量能感知，NKE 正确报告"3.1 倍放量的 Terminal Shakeout"；部分标的的具体 Phase 因 SC 选取更准确而调整（如 TSLA C→E、COIN C→A），方向本身保持稳定。
 ```
 
+## Stage 2 实施状态
+
+- [x] 逐 K 线 VSA 检测器（8 种经典效果/结果信号，`wyckoff_vsa_signals.py` 6 个仅需单根 K 线的检测器 + `wyckoff_vsa_range_signals.py` 2 个需要交易区间边界的检测器；两个文件系因 150 行/文件上限拆分）
+- [x] VSA 编排层（`wyckoff_vsa.py`）：限定在活跃交易区间窗口内、按 `curr_date` 截断、confirming/contradicting 判定、置信度调整（单信号 ±0.05，总量上限 ±0.15）
+- [x] 接入 `wyckoff_bias.py`：中性读数不受影响，非中性读数新增 `vsa_signals` 字段并调整 `confidence`
+- [x] 合成行情单元测试（bar-only 检测器、range-aware 检测器、编排层、`wyckoff_bias.py` 接线）
+- [x] 隔离回归测试（按 CLAUDE.md 默认验证策略，仅测受影响文件，未触及跨模块共享状态，无需全量套件）
+
+验证结果：
+
+```text
+隔离测试：26 passed（bar-only 检测器 9、range-aware 检测器 5、编排层 5、wyckoff_bias 接线 6、
+market ToolNode 接线 1，覆盖 tests/test_wyckoff_vsa_bar_signals.py、
+tests/test_wyckoff_vsa_range_signals.py、tests/test_wyckoff_vsa.py、
+tests/test_wyckoff_bias.py、tests/test_market_toolnode.py）
+ruff check（8 个新增/改动文件）：All checks passed
+```
+
+设计文档：`docs/superpowers/specs/2026-07-09-wyckoff-vsa-design.md`
+实施计划：`docs/superpowers/plans/2026-07-09-wyckoff-vsa-implementation.md`
+
 ## 后续迭代
 
-1. **Stage 2：VSA（Volume Spread Analysis）模块。** 新增 `tradingagents/dataflows/wyckoff_vsa.py`，逐 K 线计算价格波幅（spread）与成交量的努力-结果背离（宽幅放量、窄幅放量无进展、无量下跌/无量上涨等经典 VSA 信号），作为 `wyckoff_bias.py` 置信度的辅助证据源，而不是替代 Stage 1 的结构判定。
-2. 用类似 `scripts/backtest_chart_patterns.py` 的 walk-forward 脚本对 `dominant_weight`（默认 0.6）、`confidence` 评分公式和各事件的成交量比值门槛做历史校准。
+1. ~~Stage 2：VSA（Volume Spread Analysis）模块~~ — 已完成，见上「Stage 2 实施状态」。
+2. 用类似 `scripts/backtest_chart_patterns.py` 的 walk-forward 脚本对 `dominant_weight`（默认 0.6）、`confidence` 评分公式、各事件的成交量比值门槛，以及新增的 VSA 信号阈值（`NARROW_SPREAD_ATR` 等）做历史校准。
 3. 复杂结构处理：目前区间/事件识别假设一个回看窗口内出现单一主导交易区间；后续可扩展处理"区间失败后在更大范围重新构筑新区间"的复合结构（呼应 `chart_patterns.py` 里 `structure_may_be_expanding` 的思路）。
 4. 评估是否需要把威科夫结论的权重规则延伸到 bull/bear researcher 与 risk 辩论等下游 Agent；这会涉及修改目前尚未被本项目定制过的上游文件，需要用户单独明确批准后才能进行。
 
