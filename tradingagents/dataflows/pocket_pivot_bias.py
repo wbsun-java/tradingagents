@@ -65,5 +65,4 @@ def analyze_pocket_pivots(symbol: str, curr_date: str, look_back_days: int = 320
     """Load cutoff-safe OHLCV and return a formatted JSON pocket pivot report."""
     data = load_ohlcv(symbol, curr_date)
     result = analyze_pocket_pivots_from_data(data, curr_date, look_back_days)
-    result["symbol"] = symbol.upper()
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return json.dumps({"symbol": symbol.upper(), **result}, indent=2, ensure_ascii=False)

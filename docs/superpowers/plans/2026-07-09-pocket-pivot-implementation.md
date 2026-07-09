@@ -42,7 +42,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tradingagents.dataflows.pocket_pivot_signals import find_pocket_pivots
+from tradingagents.dataflows.pocket_pivot_signals import (
+    atr,
+    find_pocket_pivots,
+    prepare_ohlcv,
+)
 
 ATR = 2.0
 
@@ -127,6 +131,58 @@ def test_gap_up_flag_reflects_open_vs_prior_close():
     events = find_pocket_pivots(df, ATR, ma_periods=(10,))
     assert len(events) == 1
     assert events[0].gap_up is True
+
+
+@pytest.mark.unit
+def test_prepare_ohlcv_raises_when_fewer_than_min_rows_available():
+    dates = pd.date_range("2020-01-01", periods=30, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [100.0] * 30,
+            "High": [100.5] * 30,
+            "Low": [99.5] * 30,
+            "Close": [100.0] * 30,
+            "Volume": [1_000_000.0] * 30,
+        }
+    )
+    with pytest.raises(ValueError):
+        prepare_ohlcv(df, "2020-01-30", look_back_days=30)
+
+
+@pytest.mark.unit
+def test_prepare_ohlcv_raises_for_missing_columns():
+    dates = pd.date_range("2020-01-01", periods=60, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [100.0] * 60,
+            "High": [100.5] * 60,
+            "Low": [99.5] * 60,
+            "Close": [100.0] * 60,
+        }
+    )
+    with pytest.raises(ValueError):
+        prepare_ohlcv(df, "2020-03-01", look_back_days=60)
+
+
+@pytest.mark.unit
+def test_atr_returns_non_nan_value_with_sufficient_rows():
+    dates = pd.date_range("2020-01-01", periods=20, freq="D")
+    closes = [100.0 + (1 if k % 2 == 0 else -1) for k in range(20)]
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": closes,
+            "High": [c + 0.5 for c in closes],
+            "Low": [c - 0.5 for c in closes],
+            "Close": closes,
+            "Volume": [1_000_000.0] * 20,
+        }
+    )
+    atr_series = atr(df)
+    assert not pd.isna(atr_series.iloc[-1])
+    assert atr_series.iloc[-1] > 0
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -156,6 +212,12 @@ CROSS_BUFFER_ATR = 0.1
 DOWN_VOLUME_LOOKBACK = 10
 EVENT_SCAN_WINDOW = 60
 MA_PERIODS: tuple[int, ...] = (10, 50)
+# sma(50) needs 50 valid closes to produce one non-NaN value, and _qualifies
+# requires both ma_series.iloc[i] and ma_series.iloc[i-1] to be non-NaN, so
+# the earliest possible non-NaN pair needs i >= 50 (0-indexed) i.e. 51 rows
+# total. That's the smallest row count for which the 50dma pocket pivot rule
+# can ever fire, and it comfortably covers atr()'s own 15-row minimum too.
+MIN_ROWS = 51
 
 
 def prepare_ohlcv(data: pd.DataFrame, curr_date: str, look_back_days: int) -> pd.DataFrame:
@@ -174,9 +236,11 @@ def prepare_ohlcv(data: pd.DataFrame, curr_date: str, look_back_days: int) -> pd
     )
     cutoff = pd.to_datetime(curr_date)
     df = df[df["Date"] <= cutoff]
-    if look_back_days:
-        df = df.tail(look_back_days)
-    return df.reset_index(drop=True)
+    df = df.tail(max(MIN_ROWS, int(look_back_days)))
+    df = df.reset_index(drop=True)
+    if len(df) < MIN_ROWS:
+        raise ValueError(f"At least {MIN_ROWS} OHLCV rows are required for Pocket Pivot analysis.")
+    return df
 
 
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -261,7 +325,7 @@ def find_pocket_pivots(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_pocket_pivot_signals.py -v`
-Expected: PASS (5 passed). If a fixture's margin turns out too tight (e.g. a boundary condition doesn't land as expected), adjust that test's numeric constants — not the detector logic — and re-run.
+Expected: PASS (8 passed). If a fixture's margin turns out too tight (e.g. a boundary condition doesn't land as expected), adjust that test's numeric constants — not the detector logic — and re-run.
 
 - [ ] **Step 5: Run ruff and commit**
 

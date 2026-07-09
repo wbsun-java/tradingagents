@@ -52,6 +52,17 @@ def test_analyze_returns_event_and_marks_it_active_near_curr_date():
     curr_date = df["Date"].iloc[-1].strftime("%Y-%m-%d")
     result = analyze_pocket_pivots_from_data(df, curr_date)
     assert len(result["events"]) == 1
+    event = result["events"][0]
+    assert set(event["context"]) == {
+        "multi_month_downtrend",
+        "above_sma50",
+        "above_sma200",
+        "sma50",
+        "sma200",
+        "v_shape_risk",
+        "extended_from_ma",
+    }
+    assert event["evidence"]
     assert result["active"] is True
     assert result["most_recent_event_date"] == curr_date
     assert "limitations" in result

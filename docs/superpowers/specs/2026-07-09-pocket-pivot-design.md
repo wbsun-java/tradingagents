@@ -194,6 +194,10 @@ this, split by responsibility (mirrors the `wyckoff_vsa_signals.py` /
   the tool caller (no silent fallback; matches existing convention where
   `market_analyst.py`'s `_fetch_*_block` wrappers are the only place errors
   are caught, and this tool isn't wired there).
+- Too-short cutoff-safe OHLCV: after applying `curr_date` truncation,
+  `prepare_ohlcv` also raises `ValueError` when fewer than `MIN_ROWS = 51`
+  rows remain. This is a separate hard data-shape guard from missing columns;
+  it does not change per-flag insufficient-history behavior below.
 - Insufficient history for a given check (e.g. <200 bars for SMA200, <105
   bars for downtrend): that specific field is `None`/`null`, not an error —
   the rest of the analysis proceeds.
