@@ -4,7 +4,7 @@
 
 **Goal:** Add Volume Spread Analysis (VSA) as a bounded confidence adjustment on top of the existing, completed Wyckoff Stage 1 structural read, per `docs/superpowers/specs/2026-07-09-wyckoff-vsa-design.md`.
 
-**Architecture:** Two new files — `wyckoff_vsa_signals.py` (8 pure per-bar detector functions) and `wyckoff_vsa.py` (thin orchestrator: range-window filtering, confirming/contradicting tagging, bounded confidence delta) — plus a small wiring edit to the existing `wyckoff_bias.py`.
+**Architecture:** Three new files — `wyckoff_vsa_signals.py` (6 bar-only detector functions), `wyckoff_vsa_range_signals.py` (2 range-aware detector functions, split out to respect the 150-line-per-file cap), and `wyckoff_vsa.py` (thin orchestrator: range-window filtering, confirming/contradicting tagging, bounded confidence delta) — plus a small wiring edit to the existing `wyckoff_bias.py`.
 
 **Tech Stack:** Python, pandas (existing project stack — no new dependencies).
 
@@ -15,7 +15,7 @@
 - No signal may be computed from data after `curr_date` (plan principle 2 / spec).
 - Every emitted VSA signal must carry an auditable date, volume-ratio, and evidence string explaining the effort-vs-result reasoning (spec principle 4).
 - VSA may only move `confidence`, and only within `[-0.15, +0.15]` net, clamped to `[0.0, 1.0]` after combining with Stage 1's confidence. It must never change `phase_bias`, `current_phase`, or `dominant_weight`.
-- Per CLAUDE.md's default verification policy: this is an isolated additive change to custom files, so run `pytest -q tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py` and `ruff check tradingagents/dataflows/wyckoff_vsa_signals.py tradingagents/dataflows/wyckoff_vsa.py tradingagents/dataflows/wyckoff_bias.py tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py` — not the full suite.
+- Per CLAUDE.md's default verification policy: this is an isolated additive change to custom files, so run `pytest -q tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py` and `ruff check tradingagents/dataflows/wyckoff_vsa_signals.py tradingagents/dataflows/wyckoff_vsa_range_signals.py tradingagents/dataflows/wyckoff_vsa.py tradingagents/dataflows/wyckoff_bias.py tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py` — not the full suite.
 - Existing helpers to reuse, do not reimplement: `volume_ratio(df, index, window=20)` and `TradingRange` from `tradingagents/dataflows/wyckoff_range.py`.
 
 ---
@@ -377,13 +377,22 @@ git commit -m "feat(wyckoff): add VSA climax_bar and effort-no-result detectors"
 
 ### Task 3: test_bar / upthrust_shakeout_on_volume (range-aware detectors)
 
+**Amendment (post-Task-2):** `wyckoff_vsa_signals.py` is already 151 lines
+after Task 2 (over the 150-line-per-file cap), so Task 3's two detectors go
+in a new sibling file, `wyckoff_vsa_range_signals.py`, instead of appending
+to `wyckoff_vsa_signals.py`. This mirrors the test-file split the plan
+already uses (`test_wyckoff_vsa_bar_signals.py` vs
+`test_wyckoff_vsa_range_signals.py`) and CLAUDE.md's guidance to split by
+signal type when a file grows past the cap. Task 4's orchestrator import
+list is updated accordingly (see Task 4 below).
+
 **Files:**
-- Modify: `tradingagents/dataflows/wyckoff_vsa_signals.py` (append — completes the file)
+- Create: `tradingagents/dataflows/wyckoff_vsa_range_signals.py`
 - Create: `tests/test_wyckoff_vsa_range_signals.py`
 
 **Interfaces:**
 - Produces: `test_bar(df, i, atr_value, rng: TradingRange) -> VsaSignal | None`; `upthrust_shakeout_on_volume(df, i, atr_value, rng: TradingRange) -> VsaSignal | None`; module constant `ABOVE_AVERAGE_VOLUME_RATIO = 1.3`.
-- Consumes: `TradingRange` from `tradingagents.dataflows.wyckoff_range`; all detectors from Tasks 1–2 (for the "all detectors silent" test).
+- Consumes: `VsaSignal`, `_spread`, `NARROW_SPREAD_ATR`, `WIDE_SPREAD_ATR`, `LOW_VOLUME_RATIO` from `tradingagents.dataflows.wyckoff_vsa_signals`; `volume_ratio`, `TradingRange` from `tradingagents.dataflows.wyckoff_range`; all detectors from Tasks 1–2 (for the "all detectors silent" test).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -399,6 +408,7 @@ import pandas as pd
 import pytest
 
 from tradingagents.dataflows.wyckoff_range import TradingRange
+from tradingagents.dataflows.wyckoff_vsa_range_signals import test_bar, upthrust_shakeout_on_volume
 from tradingagents.dataflows.wyckoff_vsa_signals import (
     climax_bar,
     effort_no_result_down,
@@ -406,8 +416,6 @@ from tradingagents.dataflows.wyckoff_vsa_signals import (
     no_demand,
     no_supply,
     stopping_volume,
-    test_bar,
-    upthrust_shakeout_on_volume,
 )
 
 ATR = 2.0
@@ -508,9 +516,31 @@ Expected: FAIL — `ImportError: cannot import name 'test_bar'`
 
 - [ ] **Step 3: Implement the detectors**
 
-Append to `tradingagents/dataflows/wyckoff_vsa_signals.py` (add `from tradingagents.dataflows.wyckoff_range import TradingRange, volume_ratio` to the existing import line, and `ABOVE_AVERAGE_VOLUME_RATIO = 1.3` next to the other constants):
+Create `tradingagents/dataflows/wyckoff_vsa_range_signals.py`:
 
 ```python
+"""Range-aware VSA detectors: test_bar and upthrust/shakeout-on-volume need
+the active Wyckoff trading range's boundaries, unlike the bar-only detectors
+in wyckoff_vsa_signals.py. Split out to keep both files under the
+150-line-per-file cap.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from tradingagents.dataflows.wyckoff_range import TradingRange, volume_ratio
+from tradingagents.dataflows.wyckoff_vsa_signals import (
+    LOW_VOLUME_RATIO,
+    NARROW_SPREAD_ATR,
+    WIDE_SPREAD_ATR,
+    VsaSignal,
+    _spread,
+)
+
+ABOVE_AVERAGE_VOLUME_RATIO = 1.3
+
+
 def test_bar(df: pd.DataFrame, i: int, atr_value: float, rng: TradingRange) -> VsaSignal | None:
     vr = volume_ratio(df, i)
     spread = _spread(df, i)
@@ -550,6 +580,8 @@ def upthrust_shakeout_on_volume(df: pd.DataFrame, i: int, atr_value: float, rng:
     return None
 ```
 
+Note: `_spread` is a private (underscore-prefixed) helper in `wyckoff_vsa_signals.py` being imported cross-module here — this is an accepted, deliberate exception for this closely-related sibling file (both are the two halves of one detector set split only to satisfy the line cap), not a general pattern to repeat elsewhere.
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py -v`
@@ -558,10 +590,13 @@ Expected: PASS (14 passed)
 - [ ] **Step 5: Run ruff and commit**
 
 ```bash
-ruff check tradingagents/dataflows/wyckoff_vsa_signals.py tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py
-git add tradingagents/dataflows/wyckoff_vsa_signals.py tests/test_wyckoff_vsa_range_signals.py
+ruff check tradingagents/dataflows/wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa_range_signals.py
+wc -l tradingagents/dataflows/wyckoff_vsa_signals.py tradingagents/dataflows/wyckoff_vsa_range_signals.py
+git add tradingagents/dataflows/wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa_range_signals.py
 git commit -m "feat(wyckoff): add VSA test_bar and upthrust/shakeout-on-volume detectors"
 ```
+
+Confirm both files are at or under 150 lines before committing.
 
 ---
 
@@ -572,7 +607,7 @@ git commit -m "feat(wyckoff): add VSA test_bar and upthrust/shakeout-on-volume d
 - Test: `tests/test_wyckoff_vsa.py`
 
 **Interfaces:**
-- Consumes: all 8 detectors from `wyckoff_vsa_signals.py` (Tasks 1–3); `TradingRange` from `wyckoff_range.py`.
+- Consumes: 6 bar-only detectors from `wyckoff_vsa_signals.py` (Tasks 1–2) plus `test_bar`/`upthrust_shakeout_on_volume` from `wyckoff_vsa_range_signals.py` (Task 3); `TradingRange` from `wyckoff_range.py`.
 - Produces: `analyze_vsa(df, atr_value, rng, phase_bias, curr_date) -> tuple[list[dict], float]` where each dict has keys `signal`, `date`, `direction` (`"confirming"`/`"contradicting"`), `volume_ratio`, `evidence` (list[str]); module constants `PER_SIGNAL_DELTA = 0.05`, `MAX_TOTAL_DELTA = 0.15`. This is what Task 5 (`wyckoff_bias.py`) calls.
 
 - [ ] **Step 1: Write the failing tests**
@@ -722,6 +757,7 @@ from typing import Literal
 import pandas as pd
 
 from tradingagents.dataflows.wyckoff_range import TradingRange
+from tradingagents.dataflows.wyckoff_vsa_range_signals import test_bar, upthrust_shakeout_on_volume
 from tradingagents.dataflows.wyckoff_vsa_signals import (
     climax_bar,
     effort_no_result_down,
@@ -729,8 +765,6 @@ from tradingagents.dataflows.wyckoff_vsa_signals import (
     no_demand,
     no_supply,
     stopping_volume,
-    test_bar,
-    upthrust_shakeout_on_volume,
 )
 
 PhaseBias = Literal["bullish", "bearish"]
@@ -904,7 +938,7 @@ Expected: all pass, no regressions in `test_market_toolnode.py` (confirms `get_w
 
 Run:
 ```bash
-ruff check tradingagents/dataflows/wyckoff_vsa_signals.py tradingagents/dataflows/wyckoff_vsa.py tradingagents/dataflows/wyckoff_bias.py tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py
+ruff check tradingagents/dataflows/wyckoff_vsa_signals.py tradingagents/dataflows/wyckoff_vsa_range_signals.py tradingagents/dataflows/wyckoff_vsa.py tradingagents/dataflows/wyckoff_bias.py tests/test_wyckoff_vsa_bar_signals.py tests/test_wyckoff_vsa_range_signals.py tests/test_wyckoff_vsa.py tests/test_wyckoff_bias.py
 ```
 Expected: `All checks passed!`
 
