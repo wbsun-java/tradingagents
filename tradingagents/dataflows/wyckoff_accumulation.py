@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradingagents.dataflows.wyckoff_events import WyckoffEvent, confidence_for, detect_events
+from tradingagents.dataflows.wyckoff_invalidation import check_invalidation
 from tradingagents.dataflows.wyckoff_range import TradingRange
 
 
@@ -21,6 +22,7 @@ class AccumulationResult:
     events: list[WyckoffEvent]
     phase: str
     confidence: float
+    invalidated: bool = False
 
 
 def analyze_accumulation(
@@ -32,4 +34,9 @@ def analyze_accumulation(
     events, phase = detect_events(df, atr_value, rng, "accumulation")
     if phase == "undetermined":
         return None
-    return AccumulationResult(events=events, phase=phase, confidence=confidence_for(events, phase))
+    failure = check_invalidation(df, atr_value, rng, "accumulation", events, phase)
+    if failure is not None:
+        events = [*events, failure]
+    return AccumulationResult(
+        events=events, phase=phase, confidence=confidence_for(events, phase), invalidated=failure is not None
+    )

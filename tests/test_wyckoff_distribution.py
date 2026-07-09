@@ -102,6 +102,29 @@ def test_textbook_sequence_reaches_phase_e_with_all_core_events():
         "test", "sign_of_weakness", "last_point_of_supply", "upthrust",
     }
     assert result.confidence > 0.8
+    assert result.invalidated is False
+
+
+_REVERSAL = [(96.0, 95.5, 97.0, 1_500_000.0)]  # closes back above the original range high
+
+
+@pytest.mark.unit
+def test_reversal_after_upthrust_marks_the_read_invalidated():
+    closes, highs, lows, volumes = _base_bars()
+    _extend(closes, highs, lows, volumes, _TEXTBOOK_EVENTS)
+    _extend(closes, highs, lows, volumes, _AFTER_UTAD)
+    _extend(closes, highs, lows, volumes, [], pad_bars=30, pad_bar=(85.0, 84.0, 86.0))
+    _extend(closes, highs, lows, volumes, [(88.0, 87.0, 89.0, 1_000_000.0), (84.0, 83.0, 85.0, 1_000_000.0), (80.0, 79.0, 81.0, 1_000_000.0)])
+    _extend(closes, highs, lows, volumes, _BREAKDOWN)
+    _extend(closes, highs, lows, volumes, [], pad_bars=5, pad_bar=(73.0, 72.0, 74.0))
+    _extend(closes, highs, lows, volumes, _REVERSAL)
+
+    result = analyze_distribution(*_prepared_inputs(_to_df(closes, highs, lows, volumes)))
+
+    assert result is not None
+    assert result.phase == "E"
+    assert result.invalidated is True
+    assert result.events[-1].event == "range_failure"
 
 
 @pytest.mark.unit
