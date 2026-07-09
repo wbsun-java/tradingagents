@@ -167,3 +167,60 @@ def test_neutral_result_has_no_vsa_confidence_delta_key():
     result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
 
     assert "vsa_confidence_delta" not in result
+
+
+def _accumulation_invalidated_df() -> pd.DataFrame:
+    down_len = 60
+    closes = [150.0 - 70.0 * i / (down_len - 1) for i in range(down_len)]
+    volumes = [1_000_000.0] * down_len
+    for i in range(29):
+        phase = i % 14
+        val = 78.0 + phase * 2.0 if phase <= 7 else 92.0 - (phase - 7) * 2.0
+        closes.append(val)
+        volumes.append(1_000_000.0)
+    volumes[down_len + 28] = 2_500_000.0
+    highs = [c + 1.0 for c in closes]
+    lows = [c - 1.0 for c in closes]
+    bars = (
+        [
+            (85.0, 84.0, 86.0, 1e6), (88.0, 87.0, 89.0, 1e6), (90.0, 89.0, 91.0, 1e6),
+            (84.0, 83.0, 85.0, 1e6), (78.0, 77.0, 79.0, 1e6), (81.0, 80.0, 82.0, 1e6),
+            (77.3, 62.0, 78.0, 1e6),
+        ]
+        + [(80.0, 79.0, 81.0, 1e6)] * 40
+        + [
+            (95.0, 94.5, 95.5, 2.0e6),   # sign_of_strength
+            (93.0, 92.5, 93.5, 1.0e6),   # last_point_of_support
+            (97.0, 96.5, 97.5, 1.2e6),   # back_up
+            (75.0, 74.5, 75.5, 1.5e6),   # reversal: closes back below range_low
+        ]
+    )
+    for c, low, high, vol in bars:
+        closes.append(c)
+        highs.append(high)
+        lows.append(low)
+        volumes.append(vol)
+    return _to_df(closes, highs, lows, volumes)
+
+
+@pytest.mark.unit
+def test_invalidated_accumulation_forces_neutral_and_skips_vsa():
+    df = _accumulation_invalidated_df()
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert result["current_phase"] == "E"
+    assert result["invalidated"] is True
+    assert result["phase_bias"] == "neutral"
+    assert result["confidence"] == 0.0
+    assert result["trading_range"]["status"] == "invalidated"
+    assert result["events"][-1]["event"] == "range_failure"
+    assert "vsa_signals" not in result
+    assert "vsa_confidence_delta" not in result
+
+
+@pytest.mark.unit
+def test_non_invalidated_accumulation_has_invalidated_false():
+    df = _accumulation_df()
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert result["invalidated"] is False

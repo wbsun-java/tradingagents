@@ -51,7 +51,7 @@ def _neutral() -> dict[str, Any]:
 
 
 def _payload(kind: Literal["accumulation", "distribution"], rng, result: AccumulationResult | DistributionResult) -> dict[str, Any]:
-    return {
+    payload = {
         "symbol": "",
         "trading_range": {
             "kind": kind,
@@ -66,7 +66,13 @@ def _payload(kind: Literal["accumulation", "distribution"], rng, result: Accumul
         "confidence": result.confidence,
         "dominant_weight": DOMINANT_WEIGHT,
         "weight_note": WEIGHT_NOTE,
+        "invalidated": result.invalidated,
     }
+    if result.invalidated:
+        payload["trading_range"]["status"] = "invalidated"
+        payload["phase_bias"] = "neutral"
+        payload["confidence"] = 0.0
+    return payload
 
 
 def analyze_wyckoff_structure_from_data(
@@ -86,6 +92,9 @@ def analyze_wyckoff_structure_from_data(
         result.update(_payload("distribution", rng, distribution))
     else:
         result.update(_neutral())
+        return result
+
+    if result["invalidated"]:
         return result
 
     vsa_signals, delta = analyze_vsa(df, atr_value, rng, result["phase_bias"], curr_date)
