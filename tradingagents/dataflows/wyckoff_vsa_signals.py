@@ -17,6 +17,9 @@ from tradingagents.dataflows.wyckoff_range import volume_ratio
 NativeDirection = Literal["bullish", "bearish"]
 
 NARROW_SPREAD_ATR = 0.5
+WIDE_SPREAD_ATR = 1.2
+CLIMAX_VOLUME_RATIO = 3.0
+ELEVATED_VOLUME_RATIO = 1.5
 STOPPING_VOLUME_SPREAD_ATR = 1.5
 STOPPING_VOLUME_RATIO = 2.0
 LOW_VOLUME_RATIO = 1.0
@@ -89,5 +92,60 @@ def stopping_volume(df: pd.DataFrame, i: int, atr_value: float) -> VsaSignal | N
             "bullish",
             vr,
             f"wide-range down bar on {vr:.1f}x avg volume, closed in the upper half of its range — absorption of selling",
+        )
+    return None
+
+
+def climax_bar(df: pd.DataFrame, i: int, atr_value: float, window: int = 10) -> VsaSignal | None:
+    vr = volume_ratio(df, i)
+    if vr is None or vr < CLIMAX_VOLUME_RATIO or _spread(df, i) <= WIDE_SPREAD_ATR * atr_value:
+        return None
+    lo = max(0, i - window)
+    low_i, high_i = float(df.at[i, "Low"]), float(df.at[i, "High"])
+    if low_i <= df["Low"].iloc[lo : i + 1].min():
+        return VsaSignal(
+            "climax_bar",
+            "bullish",
+            vr,
+            f"{vr:.1f}x avg volume on a wide-range bar making a new {window}-bar low — capitulation",
+        )
+    if high_i >= df["High"].iloc[lo : i + 1].max():
+        return VsaSignal(
+            "climax_bar",
+            "bearish",
+            vr,
+            f"{vr:.1f}x avg volume on a wide-range bar making a new {window}-bar high — blow-off",
+        )
+    return None
+
+
+def effort_no_result_up(df: pd.DataFrame, i: int, atr_value: float) -> VsaSignal | None:
+    vr = volume_ratio(df, i)
+    spread = _spread(df, i)
+    if vr is None or vr < ELEVATED_VOLUME_RATIO or not 0 < spread < NARROW_SPREAD_ATR * atr_value:
+        return None
+    close, low = float(df.at[i, "Close"]), float(df.at[i, "Low"])
+    if (close - low) <= 0.3 * spread:
+        return VsaSignal(
+            "effort_no_result_up",
+            "bearish",
+            vr,
+            f"{vr:.1f}x avg volume but closed near the bar's low — buying effort failed to produce a result",
+        )
+    return None
+
+
+def effort_no_result_down(df: pd.DataFrame, i: int, atr_value: float) -> VsaSignal | None:
+    vr = volume_ratio(df, i)
+    spread = _spread(df, i)
+    if vr is None or vr < ELEVATED_VOLUME_RATIO or not 0 < spread < NARROW_SPREAD_ATR * atr_value:
+        return None
+    close, high = float(df.at[i, "Close"]), float(df.at[i, "High"])
+    if (high - close) <= 0.3 * spread:
+        return VsaSignal(
+            "effort_no_result_down",
+            "bullish",
+            vr,
+            f"{vr:.1f}x avg volume but closed near the bar's high — selling effort failed to produce a result",
         )
     return None
