@@ -550,9 +550,16 @@ def _decline_then_bounce(
 
 @pytest.mark.unit
 def test_analyze_returns_event_and_marks_it_active_near_curr_date():
+    # decline_days=50 -> 51 total rows, meeting pocket_pivot_signals.py's
+    # MIN_ROWS=51 floor (added during Task 1's review to guard against
+    # atr()/sma() silently returning NaN on too-short data). bounce_close=95
+    # is calibrated to clear only the 10dma (sma10 ~= 91.97 + ATR buffer)
+    # and NOT the 50dma (sma50 ~= 99.7 + buffer), so exactly one event
+    # fires -- a bounce large enough to also clear the 50dma would produce
+    # two events and break the len(...) == 1 assertions below.
     df = _decline_then_bounce(
-        decline_days=15, start_price=110.0, end_price=90.0,
-        bounce_close=101.0, bounce_volume=5_000_000.0,
+        decline_days=50, start_price=110.0, end_price=90.0,
+        bounce_close=95.0, bounce_volume=5_000_000.0,
     )
     curr_date = df["Date"].iloc[-1].strftime("%Y-%m-%d")
     result = analyze_pocket_pivots_from_data(df, curr_date)
@@ -565,8 +572,8 @@ def test_analyze_returns_event_and_marks_it_active_near_curr_date():
 @pytest.mark.unit
 def test_analyze_marks_event_inactive_once_curr_date_moves_past_window():
     df = _decline_then_bounce(
-        decline_days=15, start_price=110.0, end_price=90.0,
-        bounce_close=101.0, bounce_volume=5_000_000.0, trailing_flat_days=15,
+        decline_days=50, start_price=110.0, end_price=90.0,
+        bounce_close=95.0, bounce_volume=5_000_000.0, trailing_flat_days=15,
     )
     curr_date = df["Date"].iloc[-1].strftime("%Y-%m-%d")
     result = analyze_pocket_pivots_from_data(df, curr_date)
