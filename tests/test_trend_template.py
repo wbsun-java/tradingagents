@@ -9,6 +9,28 @@ import tradingagents.dataflows.trend_template as trend_template
 from tradingagents.dataflows.trend_template import analyze_trend_template, evaluate_trend_template
 
 
+def _ramp_with_recent_surge(length: int = 260, base_end: float = 130.0, surge_to: float = 169.0) -> pd.Series:
+    """A steady ramp to base_end, then a strong surge in the final quarter."""
+    closes = pd.Series(_ramp_ohlcv(100.0, base_end, length - 63)["Close"].tolist() + [None] * 63)
+    closes.iloc[-63:] = pd.Series(
+        [closes.iloc[-64] * (1.0 + (surge_to / base_end - 1.0) * i / 62) for i in range(63)]
+    ).to_numpy()
+    return closes
+
+
+def _series_to_df(closes: pd.Series, length: int) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date": pd.bdate_range("2024-01-02", periods=length),
+            "Open": closes,
+            "High": closes + 0.5,
+            "Low": closes - 0.5,
+            "Close": closes,
+            "Volume": [1_000_000.0] * length,
+        }
+    )
+
+
 def _ramp_ohlcv(start: float, end: float, length: int) -> pd.DataFrame:
     closes = [start + (end - start) * i / (length - 1) for i in range(length)]
     return pd.DataFrame(
@@ -82,6 +104,54 @@ def test_relative_strength_is_false_when_benchmark_outperforms():
     result = evaluate_trend_template(stock, benchmark)
 
     assert result.criteria["relative_strength_at_new_high"] is False
+
+
+@pytest.mark.unit
+def test_rs_score_weights_the_most_recent_quarter_more_heavily():
+    length = 260
+    benchmark = _ramp_ohlcv(100.0, 130.0, length)  # steady benchmark uptrend, no surge
+
+    recent_surge_closes = _ramp_with_recent_surge(length, base_end=130.0, surge_to=169.0)
+    recent_df = _series_to_df(recent_surge_closes, length)
+
+    # Same total outperformance, but the surge happened a year-plus-a-quarter
+    # ago instead of in the most recent quarter -- construct by taking the
+    # recent-surge series and reversing which segment holds the big move.
+    base = 100.0
+    first_quarter_target = base * (169.0 / 130.0)
+    old_segment = [base + (first_quarter_target - base) * i / 62 for i in range(63)]
+    remainder = [old_segment[-1] * (1.0 + 0.30 * i / (length - 63 - 1)) for i in range(length - 63)]
+    old_df = _series_to_df(pd.Series(old_segment + remainder), length)
+
+    recent_result = evaluate_trend_template(recent_df, benchmark)
+    old_result = evaluate_trend_template(old_df, benchmark)
+
+    assert recent_result.values["rs_score"] is not None
+    assert old_result.values["rs_score"] is not None
+    assert recent_result.values["rs_score"] > old_result.values["rs_score"]
+
+
+@pytest.mark.unit
+def test_rs_score_is_none_with_less_than_a_year_of_history():
+    stock = _ramp_ohlcv(50.0, 150.0, 200)  # under the 253-bar requirement
+    benchmark = _ramp_ohlcv(50.0, 80.0, 200)
+
+    result = evaluate_trend_template(stock, benchmark)
+
+    assert result.values["rs_score"] is None
+
+
+@pytest.mark.unit
+def test_existing_relative_strength_criterion_unaffected_by_rs_score():
+    stock = _ramp_ohlcv(50.0, 150.0, 260)
+    benchmark = _ramp_ohlcv(50.0, 80.0, 260)
+
+    result = evaluate_trend_template(stock, benchmark)
+
+    # Unchanged from before rs_score existed.
+    assert result.criteria["relative_strength_at_new_high"] is True
+    assert result.passed_count == 8
+    assert result.stage_2_uptrend
 
 
 @pytest.mark.unit

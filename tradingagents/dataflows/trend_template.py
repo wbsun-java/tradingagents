@@ -18,6 +18,31 @@ import pandas as pd
 from tradingagents.dataflows.stockstats_utils import load_ohlcv
 
 _MONTH_BARS = 21  # ~1 trading month, for the "200-day MA rising" check
+_QUARTER_BARS = 63  # ~1 trading quarter
+_QUARTER_WEIGHTS = (0.4, 0.2, 0.2, 0.2)  # most recent quarter weighted heaviest (O'Neil/IBD style)
+
+
+def relative_strength_score(df: pd.DataFrame, benchmark_df: pd.DataFrame) -> float | None:
+    """Quarter-weighted excess return vs. benchmark; most recent quarter weighted heaviest.
+
+    Additive alongside `_relative_strength_at_new_high`'s boolean criterion --
+    does not change that criterion's, `passed_count`'s, or `stage_2_uptrend`'s
+    behavior. Returns None when there isn't a full year of aligned history.
+    """
+    merged = pd.merge(df[["Date", "Close"]], benchmark_df[["Date", "Close"]], on="Date", suffixes=("", "_bm"))
+    needed = _QUARTER_BARS * len(_QUARTER_WEIGHTS) + 1
+    if len(merged) < needed:
+        return None
+    closes = merged["Close"].to_numpy()
+    bm_closes = merged["Close_bm"].to_numpy()
+    score = 0.0
+    for i, weight in enumerate(_QUARTER_WEIGHTS):
+        end = len(closes) - 1 - i * _QUARTER_BARS
+        start = end - _QUARTER_BARS
+        stock_ret = closes[end] / closes[start] - 1.0
+        bm_ret = bm_closes[end] / bm_closes[start] - 1.0
+        score += weight * (stock_ret - bm_ret)
+    return round(float(score), 4)
 
 
 @dataclass
@@ -85,6 +110,7 @@ def evaluate_trend_template(
         "low_52w": low_52w,
         "pct_above_52w_low": round((price / low_52w - 1) * 100, 2),
         "pct_below_52w_high": round((1 - price / high_52w) * 100, 2),
+        "rs_score": relative_strength_score(df, benchmark_df) if benchmark_df is not None else None,
     }
 
     passed = sum(criteria.values())

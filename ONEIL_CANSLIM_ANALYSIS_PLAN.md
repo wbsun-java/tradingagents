@@ -195,16 +195,25 @@ The Market Analyst must:
 ## File Structure
 
 ```text
-tradingagents/dataflows/oneil_cup_handle.py
-    Cup + handle geometry detection (prior-uptrend check, cup depth/duration/shape,
-    handle depth/duration/volume dry-up); reuses chart_patterns.py's Pivot/find_pivots/ATR.
-    Independent ~420-trading-day lookback constant.
+tradingagents/dataflows/oneil_cup.py
+    Cup detection for O'Neil's cup-with-handle pattern: finds a rounded
+    consolidation base after a meaningful prior uptrend using centered
+    swing-pivot logic shared with chart_patterns.py and wyckoff_range.py.
+
+tradingagents/dataflows/oneil_handle.py
+    Handle detection for O'Neil's cup-with-handle pattern: finds the earliest
+    confirmed handle trough after a completed cup, requiring the pullback to
+    stay in the cup's upper half and show volume dry-up versus the cup.
 
 tradingagents/dataflows/oneil_breakout.py
-    Breakout + volume confirmation, forming/developing/confirmed/failed status machine,
-    confidence scoring (including trend_template's new rs_score as supporting evidence),
-    final JSON assembly. Split out from oneil_cup_handle.py the same way
-    triangle_breakout.py is split from chart_patterns.py.
+    Breakout confirmation for O'Neil's cup-with-handle: requires a close above
+    the pivot buy point with meaningfully above-average volume, then derives
+    forming/developing/confirmed/failed status and confidence scoring.
+
+tradingagents/dataflows/oneil_bias.py
+    Synthesizes the O'Neil cup-with-handle read into tool-facing JSON,
+    including the project-policy secondary_weight that ranks below Wyckoff's
+    dominant_weight.
 
 tradingagents/agents/utils/oneil_tools.py
     LangChain tool wrapper: get_oneil_setup(symbol, curr_date, look_back_days)
@@ -222,11 +231,17 @@ tradingagents/graph/trading_graph.py (existing file, edit)
 tradingagents/agents/utils/agent_utils.py (existing file, edit)
     Export get_oneil_setup.
 
-tests/test_oneil_cup_handle.py
-    Synthetic-OHLCV unit tests for cup/handle geometry detection.
+tests/test_oneil_cup.py
+    Synthetic-OHLCV unit tests for cup geometry detection.
+
+tests/test_oneil_handle.py
+    Synthetic-OHLCV unit tests for handle geometry detection.
 
 tests/test_oneil_breakout.py
     Synthetic-OHLCV unit tests for breakout/volume confirmation and the status machine.
+
+tests/test_oneil_bias.py
+    Synthetic-OHLCV unit tests for tool-facing JSON synthesis and secondary weighting.
 
 tests/test_trend_template.py (existing file, add cases)
     Assertions on rs_score's quarter-weighting behavior; regression assertions that
@@ -278,9 +293,10 @@ Tests use synthetic OHLCV to avoid real-market flakiness affecting algorithm val
 
 ## Current Implementation Status
 
-- [ ] Cup detection (`oneil_cup_handle.py`)
-- [ ] Handle detection (`oneil_cup_handle.py`)
+- [ ] Cup detection (`oneil_cup.py`)
+- [ ] Handle detection (`oneil_handle.py`)
 - [ ] Breakout + volume confirmation / status machine / confidence scoring (`oneil_breakout.py`)
+- [ ] Tool-facing JSON synthesis / secondary weighting (`oneil_bias.py`)
 - [ ] `trend_template.py` `rs_score` addition
 - [ ] LangChain tool wrapper (`oneil_tools.py`)
 - [ ] Market Analyst and market ToolNode integration (three-tier priority rule)

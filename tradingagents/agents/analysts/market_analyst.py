@@ -1,3 +1,5 @@
+import json
+
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.utils.agent_utils import (
@@ -8,15 +10,52 @@ from tradingagents.agents.utils.agent_utils import (
     get_stock_data,
     get_trend_template,
     get_verified_market_snapshot,
-    get_wyckoff_structure,
 )
+from tradingagents.dataflows.oneil_bias import analyze_oneil_setup
+from tradingagents.dataflows.wyckoff_bias import analyze_wyckoff_structure
+
+
+def _fetch_wyckoff_block(ticker: str, current_date: str) -> str:
+    try:
+        return analyze_wyckoff_structure(ticker, current_date)
+    except Exception as exc:
+        return json.dumps(
+            {
+                "phase_bias": "neutral",
+                "current_phase": "undetermined",
+                "events": [],
+                "dominant_weight": 0.6,
+                "error": f"Wyckoff read unavailable: {exc}",
+            }
+        )
+
+
+def _fetch_oneil_block(ticker: str, current_date: str) -> str:
+    try:
+        return analyze_oneil_setup(ticker, current_date)
+    except Exception as exc:
+        return json.dumps(
+            {
+                "status": "none",
+                "setup_bias": "neutral",
+                "secondary_weight": 0.4,
+                "cup": None,
+                "handle": None,
+                "breakout": None,
+                "evidence": [],
+                "error": f"O'Neil read unavailable: {exc}",
+            }
+        )
 
 
 def create_market_analyst(llm):
 
     def market_analyst_node(state):
+        ticker = state["company_of_interest"]
         current_date = state["trade_date"]
         instrument_context = get_instrument_context_from_state(state)
+        wyckoff_block = _fetch_wyckoff_block(ticker, current_date)
+        oneil_block = _fetch_oneil_block(ticker, current_date)
 
         tools = [
             get_stock_data,
@@ -24,11 +63,10 @@ def create_market_analyst(llm):
             get_verified_market_snapshot,
             get_chart_patterns,
             get_trend_template,
-            get_wyckoff_structure,
         ]
 
         system_message = (
-            """You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list. The goal is to choose up to **8 indicators** that provide complementary insights without redundancy. Categories and each category's indicators are:
+            f"""You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list. The goal is to choose up to **8 indicators** that provide complementary insights without redundancy. Categories and each category's indicators are:
 
 Moving Averages:
 - close_50_sma: 50 SMA: A medium-term trend indicator. Usage: Identify trend direction and serve as dynamic support/resistance. Tips: It lags price; combine with faster indicators for timely signals.
@@ -60,10 +98,22 @@ Also call get_chart_patterns for the ticker and current date before the final re
 
 Also call get_trend_template for the ticker and current date. It scores the stock against Minervini's 8-point trend template (moving-average stacking, 52-week high/low position, and a relative-strength proxy versus a benchmark index) and reports how many of the 8 criteria pass. This is a technical-stage filter, not a buy signal: a stock passing all 8 is in what Minervini calls a "stage 2" uptrend, which is a favorable backdrop for bullish setups, while failing most criteria signals a weak or declining stage. Report the pass count and which specific criteria failed; do not treat a high pass count alone as a trade recommendation.
 
-Also call get_wyckoff_structure for the ticker and current date before the final report. It deterministically reads the stock's Wyckoff accumulation/distribution structure: the current consolidation range, the classical events found inside it (selling/buying climax, automatic rally/reaction, secondary test, spring/upthrust, sign of strength/weakness, last point of support/supply), the resulting phase (A through E), and a `phase_bias` (bullish/bearish/neutral). Treat this as the primary technical read and write it as its own section before other technical evidence: state the phase, cite the specific events with their dates and prices, and give the `dominant_weight` value. Apply this rule when synthesizing the report's overall technical conclusion: when `phase_bias` is bullish or bearish, the chart-pattern, trend-template, and indicator evidence may only adjust conviction within that same direction — they must not flip the technical conclusion to the opposite direction. If that other evidence strongly conflicts with the Wyckoff read, say so explicitly, but still lead the technical conclusion with the Wyckoff direction. When `phase_bias` is neutral (including no clear range in the lookback window), treat the other technical evidence normally, without this constraint. Do not invent Wyckoff events beyond what the tool reports.
+The stock's Wyckoff accumulation/distribution structure has already been deterministically read for you below -- do not call any tool to re-derive it. It reports the current consolidation range, the classical events found inside it (selling/buying climax, automatic rally/reaction, secondary test, spring/upthrust, sign of strength/weakness, last point of support/supply), the resulting phase (A through E), and a `phase_bias` (bullish/bearish/neutral). Treat this as the primary technical read and write it as its own section before other technical evidence: state the phase, cite the specific events with their dates and prices, and give the `dominant_weight` value. Apply this rule when synthesizing the report's overall technical conclusion: when `phase_bias` is bullish or bearish, the chart-pattern, trend-template, and indicator evidence may only adjust conviction within that same direction — they must not flip the technical conclusion to the opposite direction. If that other evidence strongly conflicts with the Wyckoff read, say so explicitly, but still lead the technical conclusion with the Wyckoff direction. When `phase_bias` is neutral (including no clear range in the lookback window), treat the other technical evidence normally, without this constraint. Do not invent Wyckoff events beyond what this JSON reports.
+
+<wyckoff_structure>
+{wyckoff_block}
+</wyckoff_structure>
+
+"""
+            + f"""The stock's William O'Neil cup-with-handle setup has already been deterministically read for you below -- do not call any tool to re-derive it. It reports whether the stock has formed a rounded consolidation base (cup) following a meaningful prior uptrend, a shallower pullback in the cup's upper half on lower volume (handle), and a breakout above the cup's left-side high confirmed by above-average volume. Report its `status` (forming/developing/confirmed/failed), the specific cup/handle/breakout dates and prices, and the `secondary_weight` value. Apply this three-tier precedence rule when synthesizing the report's overall technical conclusion: (1) if the Wyckoff `phase_bias` is bullish or bearish, it remains the final direction as already stated above; (2) if Wyckoff is neutral and this JSON's `setup_bias` is bullish, `setup_bias` becomes the directional anchor instead -- chart-pattern, trend-template, and indicator evidence may only adjust conviction within that direction, not flip it to the opposite direction; if Wyckoff is instead non-neutral and conflicts with this JSON's direction, say so explicitly ("conflicts with the O'Neil cup-with-handle structure") but still lead with the Wyckoff direction; (3) if both Wyckoff and this JSON are neutral, weigh the remaining technical evidence normally. Do not invent cup, handle, or breakout events beyond what this JSON reports.
+
+<oneil_setup>
+{oneil_block}
+</oneil_setup>"""
+            + """
 
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read, including a row for the Wyckoff phase, phase_bias, and dominant_weight."""
+            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read, including a row for the Wyckoff phase, phase_bias, and dominant_weight, and a separate row for the O'Neil cup-with-handle status, setup_bias, and secondary_weight."""
             + get_language_instruction()
         )
 

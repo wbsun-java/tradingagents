@@ -21,6 +21,7 @@ from tradingagents.agents.utils.news_data_tools import (
     get_insider_transactions,
     get_news,
 )
+from tradingagents.agents.utils.oneil_tools import get_oneil_setup
 from tradingagents.agents.utils.pattern_analysis_tools import get_chart_patterns
 from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
 from tradingagents.agents.utils.technical_indicators_tools import get_indicators
@@ -45,6 +46,7 @@ __all__ = [
     "get_chart_patterns",
     "get_trend_template",
     "get_wyckoff_structure",
+    "get_oneil_setup",
     "build_instrument_context",
     "resolve_instrument_identity",
     "get_instrument_context_from_state",

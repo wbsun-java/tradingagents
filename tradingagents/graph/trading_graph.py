@@ -23,6 +23,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_macro_indicators,
     get_news,
+    get_oneil_setup,
     get_prediction_markets,
     get_stock_data,
     get_trend_template,
@@ -180,6 +181,8 @@ class TradingAgentsGraph:
                     get_trend_template,
                     # Wyckoff accumulation/distribution structure read.
                     get_wyckoff_structure,
+                    # O'Neil cup-with-handle setup read.
+                    get_oneil_setup,
                 ]
             ),
             "social": ToolNode(
