@@ -126,6 +126,15 @@ The interactive CLI can also save Markdown reports under a user-chosen path (def
 - Preserve the typed `AgentState` keys shared across graph nodes and report generation.
 - When adding an analyst: update its factory, tool node, execution plan, conditional route,
   CLI display mapping, and tests together.
+- When adding a directly-callable Market Analyst tool (vs. a prefetch-only read like
+  Wyckoff/O'Neil): register it in `agent_utils.py` (`__all__`), `market_analyst.py`
+  (`tools=[...]` + a prompt paragraph), and `trading_graph.py`'s `"market"`
+  `ToolNode([...])` — all three, or the LLM's tool call fails at execution even though
+  wiring compiles.
+- New per-module `prepare_ohlcv`-style preparers (see `wyckoff_range.py`, `oneil_cup.py`,
+  `pocket_pivot_signals.py`) should raise `ValueError` below a computed minimum row count,
+  not just for missing columns — too little history otherwise degrades indicators to
+  silent all-NaN output instead of an error.
 - Keep ticker path handling behind `safe_ticker_component` and the symbol-normalization
   helpers (path-traversal hardening depends on this).
 - Run the full test + Ruff suite only after cross-cutting graph/provider/dataflow contract
