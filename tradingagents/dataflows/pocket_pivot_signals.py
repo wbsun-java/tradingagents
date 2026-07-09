@@ -15,6 +15,12 @@ CROSS_BUFFER_ATR = 0.1
 DOWN_VOLUME_LOOKBACK = 10
 EVENT_SCAN_WINDOW = 60
 MA_PERIODS: tuple[int, ...] = (10, 50)
+# sma(50) needs 50 valid closes to produce one non-NaN value, and _qualifies
+# requires both ma_series.iloc[i] and ma_series.iloc[i-1] to be non-NaN, so
+# the earliest possible non-NaN pair needs i >= 50 (0-indexed) i.e. 51 rows
+# total. That's the smallest row count for which the 50dma pocket pivot rule
+# can ever fire, and it comfortably covers atr()'s own 15-row minimum too.
+MIN_ROWS = 51
 
 
 def prepare_ohlcv(data: pd.DataFrame, curr_date: str, look_back_days: int) -> pd.DataFrame:
@@ -33,9 +39,11 @@ def prepare_ohlcv(data: pd.DataFrame, curr_date: str, look_back_days: int) -> pd
     )
     cutoff = pd.to_datetime(curr_date)
     df = df[df["Date"] <= cutoff]
-    if look_back_days:
-        df = df.tail(look_back_days)
-    return df.reset_index(drop=True)
+    df = df.tail(max(MIN_ROWS, int(look_back_days)))
+    df = df.reset_index(drop=True)
+    if len(df) < MIN_ROWS:
+        raise ValueError(f"At least {MIN_ROWS} OHLCV rows are required for Pocket Pivot analysis.")
+    return df
 
 
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
