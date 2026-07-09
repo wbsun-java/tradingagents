@@ -304,6 +304,17 @@ Tests use synthetic OHLCV to avoid real-market flakiness affecting algorithm val
 - [ ] Full project regression tests (`pytest -q` + `ruff check .`)
 - [ ] Stage 4 scenario verification (Wyckoff-neutral + O'Neil-confirmed / Wyckoff-vs-O'Neil conflict)
 
+## Pocket Pivot (standalone addition)
+
+Pocket Pivot detection (Kacher & Morales, *Trade Like an O'Neil Disciple*) was added as a
+deliberately standalone signal — a separate `get_pocket_pivot` tool the Market Analyst may
+call, with no wiring into this plan's cup-with-handle detection or the Wyckoff/O'Neil
+precedence chain (it can fire outside a cup-with-handle base, and deliberately does not
+complicate `oneil_bias.py`'s CANSLIM confidence math). See
+`docs/superpowers/specs/2026-07-09-pocket-pivot-design.md` (design) and
+`docs/superpowers/plans/2026-07-09-pocket-pivot-implementation.md` (6-task implementation
+plan, all tasks complete).
+
 ## Future Iterations
 
 1. Other O'Neil base patterns (flat base, ascending base, etc.) — only cup-with-handle is
