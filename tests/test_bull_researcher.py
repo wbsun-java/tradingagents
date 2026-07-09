@@ -27,7 +27,7 @@ def _make_state() -> dict:
             "history": "", "bull_history": "", "bear_history": "",
             "current_response": "", "count": 0,
         },
-        "market_report": "Wyckoff phase_bias: bearish, dominant_weight: 0.6",
+        "market_report": "Wyckoff phase_bias: bearish",
         "sentiment_report": "",
         "news_report": "",
         "fundamentals_report": "",

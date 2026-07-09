@@ -33,7 +33,7 @@ def _make_state() -> dict:
             "current_neutral_response": "",
             "count": 0,
         },
-        "market_report": "Wyckoff phase_bias: bullish, dominant_weight: 0.6",
+        "market_report": "Wyckoff structure: bullish accumulation, dominant_weight: 0.6",
         "sentiment_report": "",
         "news_report": "",
         "fundamentals_report": "",
