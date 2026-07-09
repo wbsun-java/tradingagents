@@ -41,6 +41,7 @@ Latest world affairs news: {news_report}
 {fundamentals_label}: {fundamentals_report}
 Conversation history of the debate: {history}
 Last bear argument: {current_response}
+When the market research report includes a Wyckoff phase_bias reading with a dominant_weight, treat a bullish phase_bias as strong, code-verified supporting evidence for your case -- cite the specific phase and events by date. If phase_bias is bearish, you must still build the strongest bull case you can, but explicitly address why your evidence outweighs it rather than ignoring it. If the report notes the Wyckoff read was invalidated (a breakout that failed), do not treat the earlier directional history as live support -- argue from the remaining evidence instead.
 Use this information to deliver a compelling bull argument, refute the bear's concerns, and engage in a dynamic debate that demonstrates the strengths of the bull position.
 """ + get_language_instruction()
 
