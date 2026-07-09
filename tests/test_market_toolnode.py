@@ -22,5 +22,5 @@ def test_market_toolnode_can_execute_verified_snapshot():
     # the other core market tools must remain too
     assert {
         "get_stock_data", "get_indicators", "get_chart_patterns", "get_trend_template",
-        "get_wyckoff_structure", "get_oneil_setup",
+        "get_wyckoff_structure", "get_oneil_setup", "get_pocket_pivot",
     } <= market_tools

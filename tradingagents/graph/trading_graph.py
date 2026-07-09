@@ -24,6 +24,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_macro_indicators,
     get_news,
     get_oneil_setup,
+    get_pocket_pivot,
     get_prediction_markets,
     get_stock_data,
     get_trend_template,
@@ -183,6 +184,9 @@ class TradingAgentsGraph:
                     get_wyckoff_structure,
                     # O'Neil cup-with-handle setup read.
                     get_oneil_setup,
+                    # Pocket Pivot volume/accumulation signal (independent of
+                    # the Wyckoff/O'Neil precedence chain above).
+                    get_pocket_pivot,
                 ]
             ),
             "social": ToolNode(

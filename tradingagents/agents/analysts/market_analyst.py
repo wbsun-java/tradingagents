@@ -7,6 +7,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_instrument_context_from_state,
     get_language_instruction,
+    get_pocket_pivot,
     get_stock_data,
     get_trend_template,
     get_verified_market_snapshot,
@@ -63,6 +64,7 @@ def create_market_analyst(llm):
             get_verified_market_snapshot,
             get_chart_patterns,
             get_trend_template,
+            get_pocket_pivot,
         ]
 
         system_message = (
@@ -97,6 +99,8 @@ Before writing the final report, call get_verified_market_snapshot for this tick
 Also call get_chart_patterns for the ticker and current date before the final report. Treat its deterministic output as the source of truth for W bottoms (double bottoms), M tops (double tops), rectangles, triangles, support/resistance, and breakouts. Clearly distinguish `forming`, `confirmed`, and `failed` patterns. A forming pattern is a watch condition, not a trade signal. Report the calculated confirmation, target, and invalidation levels; do not invent additional visual patterns from the raw CSV. For triangles, report `breakout_progress`: the preferred breakout zone is roughly 55%-75% of the base-to-apex distance (around two-thirds), while a `late_apex_breakout` above 85% carries elevated false-break risk and must reduce conviction. Do not penalize an earlier breakout solely for its timing; note that the structure may evolve into a different pattern and should be re-evaluated. Use volume confirmation and other indicators as supporting context rather than as substitutes for geometric confirmation.
 
 Also call get_trend_template for the ticker and current date. It scores the stock against Minervini's 8-point trend template (moving-average stacking, 52-week high/low position, and a relative-strength proxy versus a benchmark index) and reports how many of the 8 criteria pass. This is a technical-stage filter, not a buy signal: a stock passing all 8 is in what Minervini calls a "stage 2" uptrend, which is a favorable backdrop for bullish setups, while failing most criteria signals a weak or declining stage. Report the pass count and which specific criteria failed; do not treat a high pass count alone as a trade recommendation.
+
+Also call get_pocket_pivot for the ticker and current date. It deterministically detects Pocket Pivots (Kacher & Morales): a price close back above the 10-day or 50-day moving average on an up day, confirmed by volume exceeding the highest down-volume day of the prior 10 sessions. This is an independent volume/accumulation signal, separate from the Wyckoff and O'Neil precedence chain described below -- it does not participate in and must not override the Wyckoff phase_bias or O'Neil setup_bias direction; report it as supplementary color alongside a `context` block of buyability flags (multi-month downtrend, position vs. 50/200dma, V-shape reversal risk, extension from the 10dma). These flags are informational, not automatic disqualifiers -- weigh them when discussing the signal's strength. Do not evaluate fundamentals or wedge-pattern geometry from this tool; it does not compute them. Only mention a pocket pivot if `events` is non-empty, and note whether `active` is true.
 
 The stock's Wyckoff accumulation/distribution structure has already been deterministically read for you below -- do not call any tool to re-derive it. It reports the current consolidation range, the classical events found inside it (selling/buying climax, automatic rally/reaction, secondary test, spring/upthrust, sign of strength/weakness, last point of support/supply), the resulting phase (A through E), and a `phase_bias` (bullish/bearish/neutral). Treat this as the primary technical read and write it as its own section before other technical evidence: state the phase, cite the specific events with their dates and prices, and give the `dominant_weight` value. Apply this rule when synthesizing the report's overall technical conclusion: when `phase_bias` is bullish or bearish, the chart-pattern, trend-template, and indicator evidence may only adjust conviction within that same direction — they must not flip the technical conclusion to the opposite direction. If that other evidence strongly conflicts with the Wyckoff read, say so explicitly, but still lead the technical conclusion with the Wyckoff direction. When `phase_bias` is neutral (including no clear range in the lookback window), treat the other technical evidence normally, without this constraint. Do not invent Wyckoff events beyond what this JSON reports.
 

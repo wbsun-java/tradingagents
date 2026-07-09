@@ -23,6 +23,7 @@ from tradingagents.agents.utils.news_data_tools import (
 )
 from tradingagents.agents.utils.oneil_tools import get_oneil_setup
 from tradingagents.agents.utils.pattern_analysis_tools import get_chart_patterns
+from tradingagents.agents.utils.pocket_pivot_tools import get_pocket_pivot
 from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
 from tradingagents.agents.utils.technical_indicators_tools import get_indicators
 from tradingagents.agents.utils.trend_template_tools import get_trend_template
@@ -47,6 +48,7 @@ __all__ = [
     "get_trend_template",
     "get_wyckoff_structure",
     "get_oneil_setup",
+    "get_pocket_pivot",
     "build_instrument_context",
     "resolve_instrument_identity",
     "get_instrument_context_from_state",
