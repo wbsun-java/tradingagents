@@ -123,3 +123,19 @@ def test_prefetch_failures_degrade_gracefully(monkeypatch):
 
     assert "market_report" in result
     assert '"phase_bias": "neutral"' in _system_content()
+
+
+@pytest.mark.unit
+def test_invalidated_wyckoff_read_is_explained_in_the_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_wyckoff_structure",
+        lambda *_args: '{"phase_bias":"neutral","invalidated":true}',
+    )
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
+        lambda *_args: '{"setup_bias":"neutral"}',
+    )
+
+    create_market_analyst(_fake_llm())(_make_state())
+
+    assert "range_failure" in _system_content()
