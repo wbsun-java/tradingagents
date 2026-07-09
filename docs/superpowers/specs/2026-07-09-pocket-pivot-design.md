@@ -8,9 +8,21 @@ precedence chain: a pocket pivot can fire outside a cup-with-handle base and
 should not be forced into that ranking, nor should it complicate
 `oneil_bias.py`'s CANSLIM confidence math.
 
-**Non-goals:** No changes to `market_analyst.py`, `wyckoff_bias.py`, or
-`oneil_bias.py`. No fundamentals check (belongs to the Fundamentals Analyst).
-No wedge-pattern detector (none exists in this codebase; out of scope here).
+**Non-goals:** No changes to the Wyckoff/O'Neil precedence prose, no changes
+to `wyckoff_bias.py` or `oneil_bias.py`, no prefetch wiring for this signal.
+No fundamentals check (belongs to the Fundamentals Analyst). No wedge-pattern
+detector (none exists in this codebase; out of scope here).
+
+**`market_analyst.py` scope (user-approved):** unlike Wyckoff/O'Neil (which
+are prefetch-only and never appear in the callable `tools=[...]` list), the
+only way the Market Analyst LLM can invoke any tool is via that list, and
+each tool there gets a short prompt paragraph telling the LLM to call it
+(see `get_chart_patterns`/`get_trend_template`'s treatment). So making
+`get_pocket_pivot` reachable requires: (1) importing it and adding it to
+`tools = [...]`, and (2) one new prompt paragraph introducing it — explicitly
+*not* part of the Wyckoff/O'Neil precedence chain, no prefetch, no directive
+about overriding other evidence. This is the only edit this feature makes to
+`market_analyst.py`.
 
 ## Core definition (the two hard rules)
 
