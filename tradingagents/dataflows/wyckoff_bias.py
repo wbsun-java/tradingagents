@@ -90,6 +90,7 @@ def analyze_wyckoff_structure_from_data(
 
     vsa_signals, delta = analyze_vsa(df, atr_value, rng, result["phase_bias"], curr_date)
     result["vsa_signals"] = vsa_signals
+    result["vsa_confidence_delta"] = round(delta, 4)
     result["confidence"] = round(max(0.0, min(1.0, result["confidence"] + delta)), 2)
     return result
 

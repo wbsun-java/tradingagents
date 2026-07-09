@@ -144,3 +144,26 @@ def test_neutral_result_has_no_vsa_signals_key():
     result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
 
     assert "vsa_signals" not in result
+
+
+@pytest.mark.unit
+def test_accumulation_result_includes_vsa_confidence_delta_as_float():
+    df = _accumulation_df()
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert "vsa_confidence_delta" in result
+    assert isinstance(result["vsa_confidence_delta"], float)
+
+
+@pytest.mark.unit
+def test_neutral_result_has_no_vsa_confidence_delta_key():
+    length = 120
+    closes = [50.0 + 100.0 * i / (length - 1) for i in range(length)]
+    highs = [c + 0.5 for c in closes]
+    lows = [c - 0.5 for c in closes]
+    volumes = [1_000_000.0] * length
+    df = _to_df(closes, highs, lows, volumes)
+
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert "vsa_confidence_delta" not in result
