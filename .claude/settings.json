@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config *)",
+      "Bash(set -e)",
+      "Bash(codex --version)",
+      "Bash(codex exec *)",
+      "Bash(codex login *)",
+      "Bash(sudo -n true)",
+      "Bash(sudo apt-get install -y bubblewrap)",
+      "Bash(dpkg -L bubblewrap)",
+      "Bash(sudo aa-status)",
+      "Bash(sudo dmesg)",
+      "Bash(sudo apparmor_parser -Q /etc/apparmor.d/unprivileged_userns)",
+      "Bash(sudo cat /sys/kernel/security/apparmor/policy/profiles/unprivileged_userns/raw_data)",
+      "Bash(sudo apparmor_parser --skip-read-cache -r /etc/apparmor.d/unprivileged_userns)",
+      "Bash(bwrap --unshare-user --unshare-net --dev-bind / / -- /bin/true)",
+      "Bash(sudo rm /etc/apparmor.d/local/unprivileged_userns)",
+      "Bash(sysctl kernel.apparmor_restrict_unprivileged_userns)",
+      "Bash(sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0)",
+      "Bash(sudo tee /etc/sysctl.d/99-unprivileged-userns.conf)",
+      "Bash(sudo sysctl --system)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(python -c ' *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
