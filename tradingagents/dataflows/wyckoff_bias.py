@@ -20,6 +20,7 @@ from tradingagents.dataflows.stockstats_utils import load_ohlcv
 from tradingagents.dataflows.wyckoff_accumulation import AccumulationResult, analyze_accumulation
 from tradingagents.dataflows.wyckoff_distribution import DistributionResult, analyze_distribution
 from tradingagents.dataflows.wyckoff_range import atr, detect_trading_range, prepare_ohlcv
+from tradingagents.dataflows.wyckoff_vsa import analyze_vsa
 
 DOMINANT_WEIGHT = 0.6
 WEIGHT_NOTE = (
@@ -85,6 +86,11 @@ def analyze_wyckoff_structure_from_data(
         result.update(_payload("distribution", rng, distribution))
     else:
         result.update(_neutral())
+        return result
+
+    vsa_signals, delta = analyze_vsa(df, atr_value, rng, result["phase_bias"], curr_date)
+    result["vsa_signals"] = vsa_signals
+    result["confidence"] = round(max(0.0, min(1.0, result["confidence"] + delta)), 2)
     return result
 
 

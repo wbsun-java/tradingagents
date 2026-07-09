@@ -121,3 +121,26 @@ def test_analyze_wyckoff_structure_returns_json_with_uppercased_symbol(monkeypat
 
     assert '"symbol": "AAPL"' in payload
     assert '"phase_bias": "bullish"' in payload
+
+
+@pytest.mark.unit
+def test_accumulation_result_includes_vsa_signals_key():
+    df = _accumulation_df()
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert "vsa_signals" in result
+    assert isinstance(result["vsa_signals"], list)
+
+
+@pytest.mark.unit
+def test_neutral_result_has_no_vsa_signals_key():
+    length = 120
+    closes = [50.0 + 100.0 * i / (length - 1) for i in range(length)]
+    highs = [c + 0.5 for c in closes]
+    lows = [c - 0.5 for c in closes]
+    volumes = [1_000_000.0] * length
+    df = _to_df(closes, highs, lows, volumes)
+
+    result = analyze_wyckoff_structure_from_data(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"))
+
+    assert "vsa_signals" not in result
