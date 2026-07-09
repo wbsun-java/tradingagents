@@ -282,7 +282,7 @@ ruff check（8 个新增/改动文件）：All checks passed
 
 1. ~~Stage 2：VSA（Volume Spread Analysis）模块~~ — 已完成，见上「Stage 2 实施状态」。
 2. ~~用类似 `scripts/backtest_chart_patterns.py` 的 walk-forward 脚本对 `dominant_weight`（默认 0.6）、`confidence` 评分公式、各事件的成交量比值门槛，以及新增的 VSA 信号阈值（`NARROW_SPREAD_ATR` 等）做历史校准。~~ — 报告脚本已完成，见 `scripts/backtest_wyckoff.py`（`docs/superpowers/specs/2026-07-09-wyckoff-calibration-design.md`）；脚本只产出按 `(current_phase, vsa_effect)` 分桶的胜率报告，具体常量调整仍需人工阅读报告后决定，非本次范围。
-3. 复杂结构处理：目前区间/事件识别假设一个回看窗口内出现单一主导交易区间；后续可扩展处理"区间失败后在更大范围重新构筑新区间"的复合结构（呼应 `chart_patterns.py` 里 `structure_may_be_expanding` 的思路）。
+3. ~~复杂结构处理：目前区间/事件识别假设一个回看窗口内出现单一主导交易区间；后续可扩展处理"区间失败后在更大范围重新构筑新区间"的复合结构（呼应 `chart_patterns.py` 里 `structure_may_be_expanding` 的思路）。~~ — 调研后发现该字面描述的场景已大体被 `detect_trading_range` 自身的候选筛选逻辑覆盖（优先选最近触及的区间、价格漂移过远即排除旧区间）；真正的缺口是 Phase D/E 达成后从未检查突破是否真的站稳。已实现 `wyckoff_invalidation.py`（`docs/superpowers/specs/2026-07-09-wyckoff-invalidation-design.md`）：突破后若价格收盘反向穿越原区间边界，读数标记为 `invalidated`，`phase_bias` 强制为 `neutral`、`confidence` 归零，不再作为有效方向性结论呈现。
 4. 评估是否需要把威科夫结论的权重规则延伸到 bull/bear researcher 与 risk 辩论等下游 Agent；这会涉及修改目前尚未被本项目定制过的上游文件，需要用户单独明确批准后才能进行。
 
 > 本功能用于研究和辅助分析，不构成投资建议，也不会自动执行交易。
