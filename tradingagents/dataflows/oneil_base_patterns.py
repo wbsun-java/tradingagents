@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradingagents.dataflows.oneil_ascending_base import detect_ascending_base
+from tradingagents.dataflows.oneil_base_lifecycle import base_is_stale, base_structure_broken
 from tradingagents.dataflows.oneil_base_types import BaseCandidate
 from tradingagents.dataflows.oneil_breakout import (
     BreakoutEvent,
@@ -61,6 +62,8 @@ def _cup_candidates(df: pd.DataFrame, atr_value: float) -> list[BaseCandidate]:
             pattern_type=pattern_type, complete=True, pivot_price=pivot_price,
             pivot_date=pivot_date, complete_index=complete_index,
             geometry=geometry, evidence=evidence, handle=handle,
+            start_index=cup.left_high_index,
+            base_low_price=handle.low_price if handle is not None else cup.low_price,
         ))
     forming = detect_forming_cup(df, atr_value)
     if forming is not None:
@@ -88,7 +91,10 @@ def evaluate_candidates(
 ) -> list[PatternDetection]:
     """Apply the common breakout engine once to each candidate."""
     detections: list[PatternDetection] = []
+    last_bar = len(df) - 1
     for candidate in candidates:
+        if base_is_stale(candidate, last_bar):
+            continue
         breakout = (
             find_breakout(df, candidate.pivot_price, candidate.complete_index + 1, atr_value)
             if candidate.complete
@@ -99,12 +105,14 @@ def evaluate_candidates(
             if breakout is not None
             else False
         )
+        structure_broken = base_structure_broken(df, candidate, atr_value)
         status = determine_status(
             complete=candidate.complete,
             handle=candidate.handle,
             handle_required=candidate.pattern_type == "cup_with_handle",
             breakout=breakout,
             reversed_after=reversed_after,
+            structure_broken=structure_broken,
         )
         detections.append(
             PatternDetection(

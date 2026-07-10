@@ -52,6 +52,8 @@ def test_hood_shaped_forming_cup_detected():
     assert candidate.complete is False
     assert candidate.pattern_type == "cup_without_handle"
     assert candidate.pivot_price == pytest.approx(110.5)
+    assert candidate.start_index is not None
+    assert candidate.base_low_price == pytest.approx(candidate.geometry["low_price"])
     assert 50 < candidate.geometry["depth_pct"] < 60
     assert 50 < candidate.geometry["retrace_pct"] < 70
 

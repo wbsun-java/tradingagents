@@ -26,6 +26,7 @@ PRIOR_UPTREND_MIN_GAIN_ATR = 6.0
 PRIOR_UPTREND_MIN_BARS = 30
 VOLUME_BASELINE_BARS = 20
 START_CONTAINMENT_TOLERANCE_ATR = 0.25
+BASE_MAX_AGE_DAYS = 325
 
 
 @dataclass
@@ -41,6 +42,8 @@ class BaseCandidate:
     evidence: list[str]
     handle: HandleCandidate | None = None
     undercut: bool = False
+    start_index: int | None = None
+    base_low_price: float | None = None
 
 
 def starting_peak(df: pd.DataFrame, before_index: int) -> Pivot | None:

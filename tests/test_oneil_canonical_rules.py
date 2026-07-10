@@ -72,6 +72,8 @@ def test_cup_with_handle_pivot_is_the_handle_high(monkeypatch: pytest.MonkeyPatc
     candidate = _cup_candidates(df, 1.0)[0]
     assert candidate.pivot_price == 97.0 != cup.left_high_price
     assert candidate.pivot_date == df.at[54, "Date"].strftime("%Y-%m-%d")
+    assert candidate.start_index == cup.left_high_index
+    assert candidate.base_low_price == handle.low_price
 
     detection = PatternDetection(candidate, "developing", None, 0.5)
     monkeypatch.setattr(bias, "detect_all", lambda *_: [candidate])

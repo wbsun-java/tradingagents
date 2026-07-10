@@ -79,5 +79,7 @@ def detect_forming_cup(df: pd.DataFrame, atr_value: float) -> BaseCandidate | No
                 f"Cup declined {depth_pct:.1%} to {low_price:.2f} on {low_date}.",
                 f"Recovery is in progress at {retrace_pct:.1%} retraced by {last_date} close of {last_close:.2f}.",
             ],
+            start_index=lh.index,
+            base_low_price=low_price,
         )
     return None

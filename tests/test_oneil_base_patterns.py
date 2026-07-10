@@ -110,3 +110,57 @@ def test_failed_completed_cup_does_not_mask_forming_cup(monkeypatch: pytest.Monk
     assert len(cups) == 2
     assert primary is not None and primary.candidate is forming
     assert len(others) == 1 and others[0].status == "failed"
+
+
+def _evaluation_frame(closes: list[float]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=len(closes)),
+            "Close": closes,
+            "High": [value + 1 for value in closes],
+            "Low": [value - 1 for value in closes],
+            "Volume": [100] * len(closes),
+        }
+    )
+
+
+@pytest.mark.unit
+def test_completed_base_broken_below_its_low_fails():
+    df = _evaluation_frame([100.0] * 12 + [89.0])
+    candidate = BaseCandidate(
+        "flat_base", True, 110.0, "2024-01-01", 10, {}, [],
+        start_index=0, base_low_price=90.0,
+    )
+    assert evaluate_candidates(df, [candidate], 1.0, None)[0].status == "failed"
+
+
+@pytest.mark.unit
+def test_cup_with_handle_fails_below_the_handle_low():
+    df = _evaluation_frame([100.0] * 12 + [94.0])
+    handle = HandleCandidate(
+        "2024-01-05", 4, "2024-01-11", 95.0, 5, 105.0, 0.8, 6, True
+    )
+    candidate = BaseCandidate(
+        "cup_with_handle", True, 105.0, "2024-01-05", 10, {}, [], handle,
+        start_index=0, base_low_price=95.0,
+    )
+    assert evaluate_candidates(df, [candidate], 1.0, None)[0].status == "failed"
+
+
+@pytest.mark.unit
+def test_base_older_than_65_weeks_is_dropped():
+    df = _evaluation_frame([100.0] * 327)
+    candidate = BaseCandidate(
+        "flat_base", True, 110.0, "2024-01-01", 10, {}, [],
+        start_index=0, base_low_price=90.0,
+    )
+    assert evaluate_candidates(df, [candidate], 1.0, None) == []
+
+
+@pytest.mark.unit
+def test_hand_built_candidate_without_new_fields_still_works():
+    df = _evaluation_frame([100.0] * 327)
+    candidate = BaseCandidate("flat_base", True, 110.0, "2024-01-01", 10, {}, [])
+    result = evaluate_candidates(df, [candidate], 1.0, None)
+    assert result[0].candidate is candidate
+    assert result[0].status == "developing"

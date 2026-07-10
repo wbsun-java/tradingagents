@@ -9,6 +9,7 @@ import pytest
 from tradingagents.dataflows.oneil_breakout import (
     BREAKOUT_VOLUME_RATIO,
     UNDERCUT_BONUS,
+    BreakoutEvent,
     breakout_reversed,
     compute_confidence,
     determine_status,
@@ -165,6 +166,20 @@ def test_status_is_forming_with_incomplete_pattern():
 def test_cup_without_handle_reaches_developing():
     status = determine_status(complete=True, handle=None, handle_required=False, breakout=None, reversed_after=False)
     assert status == "developing"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("breakout", [None, BreakoutEvent(10, "2024-01-10", 100, 101, 1.5, True)])
+def test_structure_broken_fails_developing_or_confirmed(breakout: BreakoutEvent | None):
+    status = determine_status(
+        complete=True,
+        handle=None,
+        handle_required=False,
+        breakout=breakout,
+        reversed_after=False,
+        structure_broken=True,
+    )
+    assert status == "failed"
 
 
 @pytest.mark.unit

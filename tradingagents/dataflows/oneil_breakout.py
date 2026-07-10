@@ -98,11 +98,14 @@ def determine_status(
     handle_required: bool,
     breakout: BreakoutEvent | None,
     reversed_after: bool,
+    structure_broken: bool = False,
 ) -> Status:
     """Classify a complete base's handle and breakout progression."""
     if not complete:
         return "forming"
     if handle is not None and not handle.valid:
+        return "failed"
+    if structure_broken:
         return "failed"
     if handle is None and handle_required:
         return "forming"

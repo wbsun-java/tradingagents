@@ -46,6 +46,8 @@ def test_textbook_flat_base_starts_at_the_peak():
     assert candidate is not None and candidate.complete is True
     assert candidate.pivot_price == pytest.approx(df.at[peak_index, "High"])
     assert candidate.geometry["start_date"] == df.at[peak_index, "Date"].strftime("%Y-%m-%d")
+    assert candidate.start_index == peak_index
+    assert candidate.base_low_price == pytest.approx(candidate.geometry["range_low"])
 
 
 @pytest.mark.unit

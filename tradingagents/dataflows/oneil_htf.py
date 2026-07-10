@@ -96,4 +96,6 @@ def detect_high_tight_flag(df: pd.DataFrame, atr_value: float) -> BaseCandidate 
             f"from the {_date(df, high_index)} high of {flag_high:.2f} to the {_date(df, low_index)} "
             f"low of {flag_low:.2f}; mean flag volume was {volume_note}.",
         ],
+        start_index=pole_end,
+        base_low_price=flag_low,
     )

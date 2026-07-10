@@ -116,6 +116,8 @@ def _build(
             "duration_days": duration,
         },
         evidence=evidence,
+        start_index=first_high.index,
+        base_low_price=pairs[-1][1].price,
     )
 
 

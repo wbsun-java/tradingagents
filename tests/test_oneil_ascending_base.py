@@ -57,6 +57,8 @@ def test_textbook_three_pullback_ascending_base():
     assert candidate is not None
     assert candidate.complete is True
     assert candidate.pivot_price == candidate.geometry["pullbacks"][2]["high"]["price"]
+    assert candidate.start_index is not None
+    assert candidate.base_low_price == candidate.geometry["pullbacks"][-1]["low"]["price"]
     assert 55 <= candidate.geometry["duration_days"] <= 65
 
 

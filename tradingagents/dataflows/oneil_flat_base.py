@@ -68,5 +68,7 @@ def detect_flat_base(df: pd.DataFrame, atr_value: float) -> BaseCandidate | None
                 f"{depth:.1%} deep over {duration} trading days.",
                 volume_evidence,
             ],
+            start_index=peak.index,
+            base_low_price=range_low,
         )
     return None

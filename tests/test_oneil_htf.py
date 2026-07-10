@@ -37,6 +37,8 @@ def test_textbook_htf_detected():
     assert candidate.complete is True
     assert candidate.pattern_type == "high_tight_flag"
     assert candidate.pivot_price == candidate.geometry["flag_high"]
+    assert candidate.start_index is not None
+    assert candidate.base_low_price == candidate.geometry["flag_low"]
 
 
 @pytest.mark.unit
