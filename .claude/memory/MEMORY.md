@@ -14,4 +14,5 @@
 - [codex 0.144.0 code_mode_host broken](feedback_codex_code_mode_host_missing.md) — pass `--disable code_mode_host` on every codex exec; exit 0 with no changes ≠ success, read the last-message file
 - [codex exec resume flags](reference_codex_resume_flags.md) — resume rejects `-s`/`-C`; use `-c sandbox_mode=...`, `-m`, `-o`, cwd-based session filtering
 - [Pattern starts at the high](feedback_pattern_start_at_high.md) — the decline off the first high is the pattern's first leg; anchor gates at the high and forbid interior highs above it
-- [O'Neil stage-4 status](project_oneil_stage4_status.md) — 8 tasks committed; cup rim-containment + double-bottom L1-anchor bugs found; user to pick first fix (cup recommended)
+- [O'Neil stage-4 status](project_oneil_stage4_status.md) — all detector corrections committed through DB v5 (9398006); remaining: base-chaining + optional stage-4 LLM rerun
+- [Double-bottom microstructure](feedback_double_bottom_microstructure.md) — lows relationship is free (undercut/equal/higher); guard with brief-shallow undercut + halves geometry, never invented ratios; gates protect the narrative, not just the entry

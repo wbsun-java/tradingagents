@@ -1,36 +1,39 @@
 ---
 name: oneil-stage4-status
-description: "O'Neil base patterns - cup family fully corrected to canonical rules (committed); next queue is double bottom, flat-base start anchor, developing-staleness"
+description: "O'Neil detectors fully corrected and committed through double-bottom v5 (9398006); only base-chaining remains, plus optional stage-4 LLM rerun"
 metadata: 
   node_type: memory
   type: project
   originSessionId: fc8faf11-79a3-4580-9066-5b4be720e03d
 ---
 
-State as of 2026-07-10 evening (plan: `docs/superpowers/plans/2026-07-10-oneil-base-patterns.md`):
+State as of 2026-07-10 end of session (all committed on main, working tree clean):
 
-- Original 8 plan tasks committed earlier (adee528..f86aa65); stage-4 runner is
-  `scripts/stage4_oneil_verify.py` (committed a687977).
-- Cup family fully corrected per [[pattern-start-at-high]] and the user's canonical
-  cup-and-handle rules, verified by user's own test runs (87 tests + ruff green):
-  1. Containment: no interior high may exceed the rim (`contained_below`,
-     `starting_peak` helpers in oneil_base_types).
-  2. Forming-cup stage (`oneil_cup_forming.py`): highest contained rim, partial
-     recovery; HOOD reads cup_without_handle forming from 2025-10-06 @ 153.86.
-  3. Dual cup candidates (completed + forming) go to arbitration; failed micro-cups
-     can't mask a live forming cup.
-  4. Forming means forming NOW: HTF flag / flat-base forming windows must extend to the
-     last bar (killed HOOD's stale 2025-07 flag).
-  5. Canonical O'Neil numbers: prior advance ≥30% (shared PRIOR_UPTREND_MIN_GAIN_RATIO
-     0.3), cup 35-325 days, depth ≤60% (bear-market allowance, user-approved), cup
-     bottom volume dry-up hard gate (`oneil_cup_quality.py`, narrated), handle must
-     drift downward, cup_with_handle pivot = HANDLE HIGH (not the rim);
-     cup_without_handle pivot stays the rim.
-- Effect: stale 18-month "developing" cups (MSFT/AMZN/TSLA) correctly culled; NVDA
-  pivot now the handle high (2026-04-27 @ 216.83).
-- Remaining queue (user picks): (a) double-bottom initial-peak anchor + containment
-  (full spec drafted in an earlier session prompt — anchor prior_uptrend at last
-  settled pivot high before L1, opening-decline gate, containment through L2,
-  prior_high in geometry/evidence); (b) flat-base start pinned to arrival high;
-  (c) staleness/price-proximity rule for long-"developing" completed patterns.
-- All fixes go through codex-delegate; commits only on the user's explicit approval.
+- Complete O'Neil correction arc, all via codex-delegate, all user-verified:
+  1. Peak anchoring + containment for cup/flat/DB per [[pattern-start-at-high]]
+     (72d6922, 457be3f, 291f6a2).
+  2. Forming-cup stage, highest-rim selection, dual cup candidates, forming-means-now
+     (60831ef and the cup commits).
+  3. Canonical numbers: prior advance >=30%, cup 35-325d, depth <=60% cup (user
+     choice) / 15-50% DB (book), flat <=15%, breakout 1.4x vs 50-DAY volume SMA
+     (c168e85), handle-high pivot, handle downward drift, cup-bottom dry-up.
+  4. Lifecycle (8ff5913): BASE_MAX_AGE_DAYS=325 from starting peak; structure_broken
+     -> failed on buffered close below the defining low (handle low for
+     cup_with_handle, range low flat, min(L1,L2) DB, last pullback low ascending,
+     flag low HTF). oneil_base_lifecycle.py.
+  5. Double bottom v5 (9398006): flexible lows per [[double-bottom-microstructure]];
+     undercut guard max(3%,1.5ATR) + 10-bar reclaim; halves geometry (M upper half,
+     feet lower half); right-side up/down-day volume narrated (not gated);
+     second_low_behavior three-way restored in detector AND Market Analyst prompt.
+- Live sweep behavior (2026-07-10): GOOGL false W dead (reads cup_without_handle
+  developing, pivot at the 348.55 rim); TSLA W survives as L2=higher; NVDA W as
+  valid undercut; META/XOM/PLTR/COIN/NFLX Ws culled; HOOD cup_without_handle forming
+  from 2025-10-06 @153.86; CRWD HTF confirmed.
+- REMAINING QUEUE (user picks later): (a) base-chaining — verify a flat base follows
+  a prior pattern's confirmed breakout (IBD 20%-from-prior-pivot continuation rule);
+  new infrastructure, deferred by agreement. (b) optional stage-4 LLM report rerun,
+  e.g. `python scripts/stage4_oneil_verify.py TSLA 2026-07-10` (higher-L2 W
+  narration).
+- Process: every fix goes through codex-delegate (never hand-edit); present
+  canon/numbers verification BEFORE launching (user interrupts launches otherwise);
+  commits only on explicit approval.
