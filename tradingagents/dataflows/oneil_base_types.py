@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import pandas as pd
 
-from tradingagents.dataflows.oneil_handle import HandleCandidate
+from tradingagents.dataflows.chart_patterns import Pivot, find_pivots
+
+if TYPE_CHECKING:
+    from tradingagents.dataflows.oneil_handle import HandleCandidate
 
 PatternType = Literal[
     "cup_with_handle",
@@ -18,10 +21,11 @@ PatternType = Literal[
     "high_tight_flag",
 ]
 
-PRIOR_UPTREND_MIN_GAIN_RATIO = 0.2
+PRIOR_UPTREND_MIN_GAIN_RATIO = 0.3
 PRIOR_UPTREND_MIN_GAIN_ATR = 6.0
 PRIOR_UPTREND_MIN_BARS = 30
 VOLUME_BASELINE_BARS = 20
+START_CONTAINMENT_TOLERANCE_ATR = 0.25
 
 
 @dataclass
@@ -37,6 +41,25 @@ class BaseCandidate:
     evidence: list[str]
     handle: HandleCandidate | None = None
     undercut: bool = False
+
+
+def starting_peak(df: pd.DataFrame, before_index: int) -> Pivot | None:
+    """Return the last settled pivot high strictly before ``before_index``."""
+    highs = (pivot for pivot in find_pivots(df) if pivot.kind == "high" and pivot.index < before_index)
+    return max(highs, key=lambda pivot: pivot.index, default=None)
+
+
+def contained_below(
+    df: pd.DataFrame,
+    peak_index: int,
+    peak_price: float,
+    end_index: int,
+    atr_value: float,
+) -> bool:
+    """Return whether the interior remains below the starting peak tolerance."""
+    interior_high = df["High"].iloc[peak_index + 1 : end_index + 1].max()
+    ceiling = peak_price + START_CONTAINMENT_TOLERANCE_ATR * atr_value
+    return bool(pd.isna(interior_high) or float(interior_high) <= ceiling)
 
 
 def prior_uptrend(df: pd.DataFrame, start_index: int, atr_value: float) -> tuple[bool, str]:

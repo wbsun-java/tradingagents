@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from tradingagents.dataflows.chart_patterns import find_pivots
+from tradingagents.dataflows.oneil_base_types import contained_below, prior_uptrend
+from tradingagents.dataflows.oneil_cup_quality import bottom_volume_dry_up
 
-PRIOR_UPTREND_LOOKBACK = 40
-PRIOR_UPTREND_MIN_ATR = 2.0
-MIN_CUP_DAYS = 25
+MIN_CUP_DAYS = 35
 MAX_CUP_DAYS = 325
 MIN_DEPTH_ATR = 3.0
 MIN_DEPTH_PCT = 0.08
-MAX_DEPTH_PCT = 0.50
+MAX_DEPTH_PCT = 0.60
 RECOVERY_BUFFER_ATR = 1.0
 ROUNDING_WINDOW = 5
 ROUNDING_TOLERANCE_ATR = 1.5
@@ -75,14 +75,6 @@ def volume_ratio(df: pd.DataFrame, index: int, window: int = 20) -> float | None
     return float(df.at[index, "Volume"]) / float(baseline) if baseline else None
 
 
-def _has_prior_uptrend(df: pd.DataFrame, index: int, atr_value: float) -> bool:
-    lookback = max(0, index - PRIOR_UPTREND_LOOKBACK)
-    if index <= lookback:
-        return False
-    change = float(df.at[index, "Close"]) - float(df.at[lookback, "Close"])
-    return change >= atr_value * PRIOR_UPTREND_MIN_ATR
-
-
 def _has_rounding_base(df: pd.DataFrame, low_index: int, low_price: float, atr_value: float, lo_bound: int, hi_bound: int) -> bool:
     lo = max(lo_bound + 1, low_index - ROUNDING_WINDOW)
     hi = min(hi_bound - 1, low_index + ROUNDING_WINDOW)
@@ -99,7 +91,8 @@ def detect_cup(df: pd.DataFrame, atr_value: float, pivot_span: int = 3) -> CupCa
     highs = [p for p in find_pivots(df, pivot_span) if p.kind == "high"]
     candidates: list[CupCandidate] = []
     for lh in highs:
-        if not _has_prior_uptrend(df, lh.index, atr_value):
+        has_uptrend, uptrend_evidence = prior_uptrend(df, lh.index, atr_value)
+        if not has_uptrend:
             continue
         window_end = min(len(df) - 1, lh.index + MAX_CUP_DAYS)
         if window_end - lh.index < MIN_CUP_DAYS:
@@ -120,10 +113,17 @@ def detect_cup(df: pd.DataFrame, atr_value: float, pivot_span: int = 3) -> CupCa
         )
         if right_high_index is None:
             continue
+        if not contained_below(df, lh.index, lh.price, right_high_index - 1, atr_value):
+            continue
         duration_days = right_high_index - lh.index
         if not (MIN_CUP_DAYS <= duration_days <= MAX_CUP_DAYS):
             continue
         if not _has_rounding_base(df, low_index, low_price, atr_value, lh.index, right_high_index):
+            continue
+        bottom_dry, bottom_evidence = bottom_volume_dry_up(
+            df, lh.index, low_index, right_high_index, ROUNDING_WINDOW
+        )
+        if not bottom_dry:
             continue
         low_date = df.at[low_index, "Date"].strftime("%Y-%m-%d")
         right_high_date = df.at[right_high_index, "Date"].strftime("%Y-%m-%d")
@@ -133,7 +133,8 @@ def detect_cup(df: pd.DataFrame, atr_value: float, pivot_span: int = 3) -> CupCa
             right_high_index=right_high_index, right_high_date=right_high_date,
             depth_pct=depth_pct, duration_days=duration_days,
             evidence=[
-                f"Prior uptrend confirmed into {lh.date} at {lh.price:.2f}.",
+                uptrend_evidence,
+                bottom_evidence,
                 f"Cup declined {depth_pct:.1%} to {low_price:.2f} on {low_date}, basing near the low "
                 f"before recovering to {lh.price:.2f} by {right_high_date} over {duration_days} trading days.",
             ],

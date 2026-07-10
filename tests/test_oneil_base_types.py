@@ -8,7 +8,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tradingagents.dataflows.oneil_base_types import BaseCandidate, prior_uptrend, volume_dry_up
+from tradingagents.dataflows.oneil_base_types import (
+    BaseCandidate,
+    contained_below,
+    prior_uptrend,
+    starting_peak,
+    volume_dry_up,
+)
 
 
 def _frame(closes: list[float], volumes: list[float] | None = None) -> pd.DataFrame:
@@ -79,3 +85,35 @@ def test_base_candidate_geometry_is_json_serializable():
     )
 
     assert json.loads(json.dumps(candidate.geometry)) == candidate.geometry
+
+
+@pytest.mark.unit
+def test_starting_peak_finds_last_settled_high_before_index():
+    df = _frame([10, 11, 12, 15, 12, 11, 10, 11, 12, 16, 12, 11, 10])
+
+    peak = starting_peak(df, 12)
+
+    assert peak is not None
+    assert peak.index == 9
+    assert peak.price == pytest.approx(16.5)
+
+
+@pytest.mark.unit
+def test_starting_peak_none_without_prior_pivot_high():
+    assert starting_peak(_frame(list(range(20))), 10) is None
+
+
+@pytest.mark.unit
+def test_contained_below_true_within_tolerance():
+    df = _frame([10, 10, 10, 10])
+    df.loc[1, "High"] = 100.2
+
+    assert contained_below(df, 0, 100.0, 2, atr_value=1.0)
+
+
+@pytest.mark.unit
+def test_contained_below_false_when_interior_high_exceeds_peak():
+    df = _frame([10, 10, 10, 10])
+    df.loc[1, "High"] = 100.3
+
+    assert not contained_below(df, 0, 100.0, 2, atr_value=1.0)

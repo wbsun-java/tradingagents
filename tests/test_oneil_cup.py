@@ -96,6 +96,49 @@ def _v_shape() -> pd.DataFrame:
     )
 
 
+def _misrimmed_cup(true_depth_pct: float) -> pd.DataFrame:
+    closes, vols = [], []
+    for i in range(50):
+        closes.append(50.0 + 50.0 * i / 49)
+        vols.append(1_000_000.0)
+    for close in np.linspace(98.0, 94.0, 4):
+        closes.append(float(close))
+        vols.append(1_000_000.0)
+    for close in np.linspace(100.0, 154.0, 12):
+        closes.append(float(close))
+        vols.append(1_000_000.0)
+    true_peak = closes[-1]
+    low_price = true_peak * (1 - true_depth_pct)
+    for i in range(45):
+        t = (i + 1) / 45
+        ease = (1 - np.cos(t * np.pi)) / 2
+        closes.append(true_peak - (true_peak - low_price) * ease)
+        vols.append(1_000_000.0)
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        closes.append(low_price + rng.uniform(-0.3, 0.3))
+        vols.append(900_000.0)
+    for i in range(45):
+        t = i / 44
+        ease = (1 - np.cos(t * np.pi)) / 2
+        closes.append(low_price + (true_peak - low_price) * ease)
+        vols.append(1_000_000.0)
+    for _ in range(30):
+        closes.append(closes[-1])
+        vols.append(1_000_000.0)
+    values = np.array(closes)
+    return pd.DataFrame(
+        {
+            "Date": pd.bdate_range("2024-01-02", periods=len(values)),
+            "Open": values,
+            "High": values + 0.5,
+            "Low": values - 0.5,
+            "Close": values,
+            "Volume": vols,
+        }
+    )
+
+
 def _prepared(df: pd.DataFrame):
     prepared = prepare_ohlcv(df, df["Date"].iloc[-1].strftime("%Y-%m-%d"), look_back_days=420)
     return prepared, float(atr(prepared).iloc[-1])
@@ -143,6 +186,23 @@ def test_depth_too_deep_does_not_qualify_as_cup():
     prepared, atr_value = _prepared(_cup(depth_pct=0.65))
 
     assert detect_cup(prepared, atr_value) is None
+
+
+@pytest.mark.unit
+def test_interior_high_above_left_high_rejects_the_rim():
+    prepared, atr_value = _prepared(_misrimmed_cup(true_depth_pct=0.65))
+
+    assert detect_cup(prepared, atr_value) is None
+
+
+@pytest.mark.unit
+def test_true_peak_rim_detected_when_depth_valid():
+    prepared, atr_value = _prepared(_misrimmed_cup(true_depth_pct=0.35))
+
+    cup = detect_cup(prepared, atr_value)
+
+    assert cup is not None
+    assert cup.left_high_price == pytest.approx(154.5)
 
 
 @pytest.mark.unit
