@@ -317,8 +317,13 @@ plan, all tasks complete).
 
 ## Future Iterations
 
-1. Other O'Neil base patterns (flat base, ascending base, etc.) — only cup-with-handle is
-   implemented in this plan.
+1. [x] Other O'Neil base patterns (flat base, double-bottom base, ascending base,
+   cup-without-handle, and high-tight flag) are implemented. See
+   `docs/superpowers/specs/2026-07-10-oneil-base-patterns-design.md` and
+   `docs/superpowers/plans/2026-07-10-oneil-base-patterns.md`. Reports now say
+   “O'Neil base-pattern,” rather than CANSLIM or cup-only. A completed cup with no handle
+   reports as `cup_without_handle` with status `developing`; previously it reported as a
+   cup-with-handle `forming` setup.
 2. A true market-wide percentile RS Rating (1-99), which needs price data for a broad stock
    universe; this plan's `rs_score` is only a single-benchmark weighted proxy.
 3. Use a walk-forward script similar to `scripts/backtest_chart_patterns.py` to historically

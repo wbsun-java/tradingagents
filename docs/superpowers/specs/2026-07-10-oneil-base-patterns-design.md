@@ -27,9 +27,10 @@ position in the Wyckoff > O'Neil > others chain is unchanged).
 
 New (each ≤150 lines):
 
-- `tradingagents/dataflows/oneil_base_types.py` — `BasePattern` dataclass: `pattern_type`,
-  `status`, `pivot_price`, `pivot_date`, per-pattern `geometry` dict, `evidence`,
-  optional handle reference, `confidence`.
+- `tradingagents/dataflows/oneil_base_types.py` — `BaseCandidate` dataclass for raw detector
+  output: `pattern_type`, `pivot_price`, `pivot_date`, per-pattern `geometry` dict, `evidence`,
+  and an optional handle reference. The shared engine produces a `PatternDetection` result
+  with evaluated `status` and `confidence`.
 - `tradingagents/dataflows/oneil_flat_base.py` — tight sideways range ≥ ~5 weeks, shallow
   depth (adaptive, guideline ≈ ≤15%), prior uptrend or prior completed base (base-on-base);
   pivot = base high.

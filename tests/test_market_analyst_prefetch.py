@@ -52,7 +52,7 @@ def test_prefetched_wyckoff_and_oneil_blocks_reach_llm(monkeypatch):
     )
     monkeypatch.setattr(
         "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
-        lambda *_args: '{"setup_bias":"bullish","sentinel":"SENTINEL_ONEIL_PAYLOAD"}',
+        lambda *_args: '{"primary_pattern":{"pattern_type":"flat_base"},"setup_bias":"bullish","sentinel":"SENTINEL_ONEIL_PAYLOAD"}',
     )
 
     create_market_analyst(_fake_llm())(_make_state())
@@ -70,7 +70,7 @@ def test_prefetched_reads_are_not_bound_as_tools(monkeypatch):
     )
     monkeypatch.setattr(
         "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
-        lambda *_args: '{"setup_bias":"neutral"}',
+        lambda *_args: '{"primary_pattern":null,"setup_bias":"neutral","other_detections":[]}',
     )
 
     create_market_analyst(_fake_llm())(_make_state())
@@ -116,7 +116,7 @@ def test_prefetch_failures_degrade_gracefully(monkeypatch):
     )
     monkeypatch.setattr(
         "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
-        lambda *_args: '{"setup_bias":"bullish"}',
+        lambda *_args: '{"primary_pattern":null,"setup_bias":"bullish","other_detections":[]}',
     )
 
     result = create_market_analyst(_fake_llm())(_make_state())
@@ -133,9 +133,41 @@ def test_invalidated_wyckoff_read_is_explained_in_the_prompt(monkeypatch):
     )
     monkeypatch.setattr(
         "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
-        lambda *_args: '{"setup_bias":"neutral"}',
+        lambda *_args: '{"primary_pattern":null,"setup_bias":"neutral","other_detections":[]}',
     )
 
     create_market_analyst(_fake_llm())(_make_state())
 
     assert "range_failure" in _system_content()
+
+
+@pytest.mark.unit
+def test_base_pattern_paragraph_reaches_the_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_wyckoff_structure",
+        lambda *_args: '{"phase_bias":"neutral"}',
+    )
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
+        lambda *_args: '{"primary_pattern":{"pattern_type":"flat_base"},"setup_bias":"bullish"}',
+    )
+
+    create_market_analyst(_fake_llm())(_make_state())
+
+    assert "second_low_behavior" in _system_content()
+
+
+@pytest.mark.unit
+def test_double_bottom_supersede_rule_present(monkeypatch):
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_wyckoff_structure",
+        lambda *_args: '{"phase_bias":"neutral"}',
+    )
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
+        lambda *_args: '{"primary_pattern":{"pattern_type":"flat_base"},"setup_bias":"neutral"}',
+    )
+
+    create_market_analyst(_fake_llm())(_make_state())
+
+    assert "single structure" in _system_content()
