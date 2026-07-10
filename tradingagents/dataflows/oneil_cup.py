@@ -24,6 +24,7 @@ RECOVERY_BUFFER_ATR = 1.0
 ROUNDING_WINDOW = 5
 ROUNDING_TOLERANCE_ATR = 1.5
 ROUNDING_MIN_BARS = 3
+VOLUME_RATIO_WINDOW = 50
 
 
 @dataclass
@@ -68,7 +69,7 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return true_range.rolling(period, min_periods=1).mean()
 
 
-def volume_ratio(df: pd.DataFrame, index: int, window: int = 20) -> float | None:
+def volume_ratio(df: pd.DataFrame, index: int, window: int = VOLUME_RATIO_WINDOW) -> float | None:
     if index < 1 or pd.isna(df.at[index, "Volume"]):
         return None
     baseline = pd.to_numeric(df["Volume"].iloc[max(0, index - window) : index], errors="coerce").mean()

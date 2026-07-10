@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from tradingagents.dataflows.oneil_breakout import (
+    BREAKOUT_VOLUME_RATIO,
     UNDERCUT_BONUS,
     breakout_reversed,
     compute_confidence,
@@ -95,6 +96,7 @@ def test_volume_confirmed_breakout_is_confirmed():
     status = determine_status(complete=True, handle=handle, handle_required=True, breakout=breakout, reversed_after=False)
     assert breakout is not None
     assert breakout.volume_confirmed is True
+    assert breakout.volume_ratio >= BREAKOUT_VOLUME_RATIO
     assert status == "confirmed"
 
 
@@ -105,6 +107,7 @@ def test_low_volume_breakout_stays_developing_not_failed():
     status = determine_status(complete=True, handle=handle, handle_required=True, breakout=breakout, reversed_after=False)
     assert breakout is not None
     assert breakout.volume_confirmed is False
+    assert breakout.volume_ratio < BREAKOUT_VOLUME_RATIO
     assert status == "developing"
 
 
