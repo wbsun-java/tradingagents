@@ -7,12 +7,14 @@ metadata:
   originSessionId: fc8faf11-79a3-4580-9066-5b4be720e03d
 ---
 
-User's principle (2026-07-10, O'Neil base-pattern stage-4 review): a pattern starts
-when price first reaches its HIGH before the correction. The decline off that high is
-the pattern's first leg. A pattern exists because price trends overlap for a stretch of
-time — bulls and bears battling. A detector must not "simply pick one price as the
-starting point": the start must be the actual peak, and no bar inside the pattern may
-exceed it.
+User's principle (2026-07-10, O'Neil base-pattern stage-4 review), refined wording:
+"The pattern should start from the peak that marks the END of the prior advance. A
+local high should not be used if price continues to rise afterward, because the
+preceding trend has not yet ended. A cup and handle should be measured only after the
+previous uptrend has fully completed and the stock has begun its corrective phase."
+The decline off that peak is the pattern's first leg; a pattern exists because price
+trends overlap for a stretch of time — bulls and bears battling. A detector must never
+"simply pick one price as the starting point."
 
 **Why:** Anchoring at the wrong point produces both false negatives (double bottom:
 prior-uptrend gate measured into the first LOW rejects textbook Ws whose first decline
