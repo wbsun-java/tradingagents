@@ -14,6 +14,7 @@ import pandas as pd
 
 from tradingagents.dataflows.oneil_breakout import (
     BreakoutEvent,
+    breakout_reversed,
     compute_confidence,
     determine_status,
     find_breakout,
@@ -68,10 +69,28 @@ def analyze_oneil_setup_from_data(data: pd.DataFrame, curr_date: str, look_back_
     atr_value = float(atr(df).iloc[-1])
     cup = detect_cup(df, atr_value)
     handle = detect_handle(df, cup, atr_value) if cup is not None else None
-    breakout = find_breakout(df, cup, handle, atr_value) if handle is not None and handle.valid else None
-    status = determine_status(cup, handle, breakout, df, atr_value)
+    breakout = (
+        find_breakout(df, cup.left_high_price, handle.end_index + 1, atr_value)
+        if cup is not None and handle is not None and handle.valid
+        else None
+    )
+    status = (
+        determine_status(
+            complete=True,
+            handle=handle,
+            handle_required=True,
+            breakout=breakout,
+            reversed_after=(
+                breakout_reversed(df, breakout, cup.left_high_price, atr_value)
+                if breakout is not None and cup is not None
+                else False
+            ),
+        )
+        if cup is not None
+        else "none"
+    )
     bias = "bullish" if status in ("forming", "developing", "confirmed") else "neutral"
-    confidence = compute_confidence(status, handle, breakout, rs_score)
+    confidence = compute_confidence("cup_with_handle", status, handle, breakout, rs_score)
     result = _payload(cup, handle, breakout, status, bias, confidence)
     result["analysis_date"] = curr_date
     return result

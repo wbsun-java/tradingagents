@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 
 from tradingagents.dataflows.oneil_breakout import (
+    UNDERCUT_BONUS,
+    breakout_reversed,
     compute_confidence,
     determine_status,
     find_breakout,
@@ -89,8 +91,8 @@ def _prepared_cup_handle(df: pd.DataFrame):
 @pytest.mark.unit
 def test_volume_confirmed_breakout_is_confirmed():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence())
-    breakout = find_breakout(prepared, cup, handle, atr_value)
-    status = determine_status(cup, handle, breakout, prepared, atr_value)
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    status = determine_status(complete=True, handle=handle, handle_required=True, breakout=breakout, reversed_after=False)
     assert breakout is not None
     assert breakout.volume_confirmed is True
     assert status == "confirmed"
@@ -99,8 +101,8 @@ def test_volume_confirmed_breakout_is_confirmed():
 @pytest.mark.unit
 def test_low_volume_breakout_stays_developing_not_failed():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence(breakout_vol_mult=0.9))
-    breakout = find_breakout(prepared, cup, handle, atr_value)
-    status = determine_status(cup, handle, breakout, prepared, atr_value)
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    status = determine_status(complete=True, handle=handle, handle_required=True, breakout=breakout, reversed_after=False)
     assert breakout is not None
     assert breakout.volume_confirmed is False
     assert status == "developing"
@@ -109,16 +111,23 @@ def test_low_volume_breakout_stays_developing_not_failed():
 @pytest.mark.unit
 def test_confirmed_breakout_that_reverses_is_failed():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence(reverses=True))
-    breakout = find_breakout(prepared, cup, handle, atr_value)
-    status = determine_status(cup, handle, breakout, prepared, atr_value)
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    assert breakout is not None
+    status = determine_status(
+        complete=True,
+        handle=handle,
+        handle_required=True,
+        breakout=breakout,
+        reversed_after=breakout_reversed(prepared, breakout, cup.left_high_price, atr_value),
+    )
     assert status == "failed"
 
 
 @pytest.mark.unit
 def test_no_breakout_attempt_yet_is_developing():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence(no_breakout=True))
-    breakout = find_breakout(prepared, cup, handle, atr_value)
-    status = determine_status(cup, handle, breakout, prepared, atr_value)
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    status = determine_status(complete=True, handle=handle, handle_required=True, breakout=breakout, reversed_after=False)
     assert breakout is None
     assert status == "developing"
 
@@ -126,24 +135,53 @@ def test_no_breakout_attempt_yet_is_developing():
 @pytest.mark.unit
 def test_confidence_increases_with_stronger_breakout_volume():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence(breakout_vol_mult=1.4))
-    weak_breakout = find_breakout(prepared, cup, handle, atr_value)
+    weak_breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
     prepared2, atr_value2, cup2, handle2 = _prepared_cup_handle(_full_sequence(breakout_vol_mult=3.0))
-    strong_breakout = find_breakout(prepared2, cup2, handle2, atr_value2)
-    weak_conf = compute_confidence("confirmed", handle, weak_breakout, None)
-    strong_conf = compute_confidence("confirmed", handle2, strong_breakout, None)
+    strong_breakout = find_breakout(prepared2, cup2.left_high_price, handle2.end_index + 1, atr_value2)
+    weak_conf = compute_confidence("cup_with_handle", "confirmed", handle, weak_breakout, None)
+    strong_conf = compute_confidence("cup_with_handle", "confirmed", handle2, strong_breakout, None)
     assert strong_conf > weak_conf
 
 
 @pytest.mark.unit
 def test_confidence_increases_with_higher_rs_score():
     prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence())
-    breakout = find_breakout(prepared, cup, handle, atr_value)
-    low_rs_conf = compute_confidence("confirmed", handle, breakout, 0.01)
-    high_rs_conf = compute_confidence("confirmed", handle, breakout, 0.20)
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    low_rs_conf = compute_confidence("cup_with_handle", "confirmed", handle, breakout, 0.01)
+    high_rs_conf = compute_confidence("cup_with_handle", "confirmed", handle, breakout, 0.20)
     assert high_rs_conf > low_rs_conf
 
 
 @pytest.mark.unit
-def test_status_is_none_with_no_cup():
-    assert determine_status(None, None, None, pd.DataFrame(), 1.0) == "none"
-    assert compute_confidence("none", None, None, None) == 0.0
+def test_status_is_forming_with_incomplete_pattern():
+    assert determine_status(complete=False, handle=None, handle_required=False, breakout=None, reversed_after=False) == "forming"
+    assert compute_confidence("cup_with_handle", "none", None, None, None) == 0.0
+
+
+@pytest.mark.unit
+def test_cup_without_handle_reaches_developing():
+    status = determine_status(complete=True, handle=None, handle_required=False, breakout=None, reversed_after=False)
+    assert status == "developing"
+
+
+@pytest.mark.unit
+def test_cup_without_handle_confirms_below_cup_with_handle():
+    cup_confidence = compute_confidence("cup_with_handle", "confirmed", None, None, None)
+    no_handle_confidence = compute_confidence("cup_without_handle", "confirmed", None, None, None)
+    assert no_handle_confidence < cup_confidence
+
+
+@pytest.mark.unit
+def test_low_volume_breakout_stays_developing_for_non_cup_pattern():
+    prepared, atr_value, cup, handle = _prepared_cup_handle(_full_sequence(breakout_vol_mult=0.9))
+    breakout = find_breakout(prepared, cup.left_high_price, handle.end_index + 1, atr_value)
+    status = determine_status(complete=True, handle=None, handle_required=False, breakout=breakout, reversed_after=False)
+    assert breakout is not None and not breakout.volume_confirmed
+    assert status == "developing"
+
+
+@pytest.mark.unit
+def test_undercut_bonus_applies_only_when_set():
+    base = compute_confidence("double_bottom_base", "developing", None, None, None)
+    undercut = compute_confidence("double_bottom_base", "developing", None, None, None, undercut=True)
+    assert undercut - base == pytest.approx(UNDERCUT_BONUS)
