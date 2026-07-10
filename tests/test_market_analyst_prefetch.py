@@ -171,3 +171,19 @@ def test_double_bottom_supersede_rule_present(monkeypatch):
     create_market_analyst(_fake_llm())(_make_state())
 
     assert "single structure" in _system_content()
+
+
+@pytest.mark.unit
+def test_starting_peak_instruction_reaches_the_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_wyckoff_structure",
+        lambda *_args: '{"phase_bias":"neutral"}',
+    )
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
+        lambda *_args: '{"primary_pattern":{"pattern_type":"flat_base"},"setup_bias":"neutral"}',
+    )
+
+    create_market_analyst(_fake_llm())(_make_state())
+
+    assert "starting peak" in _system_content()

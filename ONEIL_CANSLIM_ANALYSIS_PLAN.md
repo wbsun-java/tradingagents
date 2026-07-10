@@ -323,7 +323,9 @@ plan, all tasks complete).
    `docs/superpowers/plans/2026-07-10-oneil-base-patterns.md`. Reports now say
    “O'Neil base-pattern,” rather than CANSLIM or cup-only. A completed cup with no handle
    reports as `cup_without_handle` with status `developing`; previously it reported as a
-   cup-with-handle `forming` setup.
+   cup-with-handle `forming` setup. Detectors were subsequently corrected to peak-anchored
+   starts per O'Neil's canon, with containment, a strict double-bottom undercut, a
+   handle-high pivot, a 50-day breakout-volume baseline, and forming stages only while live.
 2. A true market-wide percentile RS Rating (1-99), which needs price data for a broad stock
    universe; this plan's `rs_score` is only a single-benchmark weighted proxy.
 3. Use a walk-forward script similar to `scripts/backtest_chart_patterns.py` to historically
