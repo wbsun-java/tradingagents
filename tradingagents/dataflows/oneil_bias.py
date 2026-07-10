@@ -1,9 +1,4 @@
-"""Synthesizes the O'Neil cup-with-handle read into the tool-facing JSON.
-
-secondary_weight is a fixed project policy constant (deliberately below
-Wyckoff's dominant_weight of 0.6), not derived from this call's data.
-See ONEIL_CANSLIM_ANALYSIS_PLAN.md.
-"""
+"""Synthesizes O'Neil base-pattern analysis into tool-facing JSON."""
 
 from __future__ import annotations
 
@@ -12,54 +7,100 @@ from typing import Any
 
 import pandas as pd
 
-from tradingagents.dataflows.oneil_breakout import (
-    BreakoutEvent,
-    breakout_reversed,
-    compute_confidence,
-    determine_status,
-    find_breakout,
+from tradingagents.dataflows.oneil_base_patterns import (
+    PatternDetection,
+    arbitrate,
+    detect_all,
+    evaluate_candidates,
 )
-from tradingagents.dataflows.oneil_cup import CupCandidate, atr, detect_cup, prepare_ohlcv
-from tradingagents.dataflows.oneil_handle import HandleCandidate, detect_handle
+from tradingagents.dataflows.oneil_cup import atr, prepare_ohlcv
 from tradingagents.dataflows.stockstats_utils import load_ohlcv
 from tradingagents.dataflows.trend_template import relative_strength_score
 
 SECONDARY_WEIGHT = 0.4
 WEIGHT_NOTE = (
-    "O'Neil cup-with-handle read ranks below Wyckoff but above chart patterns, trend "
+    "O'Neil base-pattern read ranks below Wyckoff but above chart patterns, trend "
     "template, and indicators; if Wyckoff phase_bias is non-neutral, it takes "
     "precedence over this result."
 )
+LIVE_STATUSES = {"forming", "developing", "confirmed"}
 
 
-def _payload(cup: CupCandidate | None, handle: HandleCandidate | None, breakout: BreakoutEvent | None, status: str, bias: str, confidence: float) -> dict[str, Any]:
-    evidence: list[str] = []
-    cup_dict = None
-    if cup is not None:
-        evidence.extend(cup.evidence)
-        cup_dict = {
-            "start_date": cup.left_high_date, "left_high": round(cup.left_high_price, 4),
-            "low_date": cup.low_date, "low_price": round(cup.low_price, 4),
-            "right_high_date": cup.right_high_date,
-            "depth_pct": round(cup.depth_pct * 100, 2), "duration_days": cup.duration_days,
-        }
-    handle_dict = None
-    if handle is not None:
-        evidence.extend(handle.evidence)
-        handle_dict = {
-            "start_date": handle.start_date, "end_date": handle.end_date,
-            "low_price": round(handle.low_price, 4),
-            "volume_ratio_vs_cup": round(handle.volume_ratio_vs_cup, 2) if handle.volume_ratio_vs_cup is not None else None,
-        }
-    breakout_dict = None
-    if breakout is not None:
-        confirmed_word = "Volume-confirmed" if breakout.volume_confirmed else "Unconfirmed (low-volume)"
-        evidence.append(f"{confirmed_word} breakout on {breakout.date}: close {breakout.close:.2f} vs. pivot {breakout.pivot_price:.2f}, volume {breakout.volume_ratio:.2f}x average.")
-        breakout_dict = {"date": breakout.date, "pivot_price": breakout.pivot_price, "close": breakout.close, "volume_ratio": breakout.volume_ratio}
+def _handle_payload(detection: PatternDetection) -> dict[str, Any] | None:
+    handle = detection.candidate.handle
+    if detection.candidate.pattern_type != "cup_with_handle" or handle is None:
+        return None
     return {
-        "cup": cup_dict, "handle": handle_dict, "breakout": breakout_dict,
-        "status": status, "setup_bias": bias, "confidence": confidence,
-        "secondary_weight": SECONDARY_WEIGHT, "weight_note": WEIGHT_NOTE, "evidence": evidence,
+        "start_date": handle.start_date,
+        "end_date": handle.end_date,
+        "low_price": round(handle.low_price, 4),
+        "volume_ratio_vs_cup": (
+            round(handle.volume_ratio_vs_cup, 2)
+            if handle.volume_ratio_vs_cup is not None
+            else None
+        ),
+    }
+
+
+def _breakout_payload(detection: PatternDetection) -> dict[str, Any] | None:
+    breakout = detection.breakout
+    if breakout is None:
+        return None
+    return {
+        "index": breakout.index,
+        "date": breakout.date,
+        "pivot_price": breakout.pivot_price,
+        "close": breakout.close,
+        "volume_ratio": breakout.volume_ratio,
+        "volume_confirmed": breakout.volume_confirmed,
+    }
+
+
+def _primary_payload(detection: PatternDetection) -> dict[str, Any]:
+    candidate = detection.candidate
+    return {
+        "pattern_type": candidate.pattern_type,
+        "status": detection.status,
+        "pivot_price": candidate.pivot_price,
+        "pivot_date": candidate.pivot_date,
+        "geometry": candidate.geometry,
+        "handle": _handle_payload(detection),
+        "breakout": _breakout_payload(detection),
+    }
+
+
+def _result(primary: PatternDetection | None, others: list[PatternDetection], curr_date: str) -> dict[str, Any]:
+    if primary is None:
+        return {
+            "primary_pattern": None,
+            "other_detections": [],
+            "setup_bias": "neutral",
+            "confidence": 0.0,
+            "secondary_weight": SECONDARY_WEIGHT,
+            "weight_note": WEIGHT_NOTE,
+            "evidence": [],
+            "analysis_date": curr_date,
+        }
+    evidence = list(primary.candidate.evidence)
+    if primary.breakout is not None:
+        breakout = primary.breakout
+        volume = "volume-confirmed" if breakout.volume_confirmed else "low-volume"
+        evidence.append(
+            f"{volume.capitalize()} breakout on {breakout.date} at {breakout.close:.2f} "
+            f"versus pivot {breakout.pivot_price:.2f}, with {breakout.volume_ratio:.2f}x average volume."
+        )
+    return {
+        "primary_pattern": _primary_payload(primary),
+        "other_detections": [
+            {"pattern_type": item.candidate.pattern_type, "status": item.status, "confidence": item.confidence}
+            for item in others
+        ],
+        "setup_bias": "bullish" if primary.status in LIVE_STATUSES else "neutral",
+        "confidence": primary.confidence,
+        "secondary_weight": SECONDARY_WEIGHT,
+        "weight_note": WEIGHT_NOTE,
+        "evidence": evidence,
+        "analysis_date": curr_date,
     }
 
 
@@ -67,33 +108,9 @@ def analyze_oneil_setup_from_data(data: pd.DataFrame, curr_date: str, look_back_
     """Analyze an OHLCV frame and return a JSON-serializable O'Neil setup read."""
     df = prepare_ohlcv(data, curr_date, look_back_days)
     atr_value = float(atr(df).iloc[-1])
-    cup = detect_cup(df, atr_value)
-    handle = detect_handle(df, cup, atr_value) if cup is not None else None
-    breakout = (
-        find_breakout(df, cup.left_high_price, handle.end_index + 1, atr_value)
-        if cup is not None and handle is not None and handle.valid
-        else None
-    )
-    status = (
-        determine_status(
-            complete=True,
-            handle=handle,
-            handle_required=True,
-            breakout=breakout,
-            reversed_after=(
-                breakout_reversed(df, breakout, cup.left_high_price, atr_value)
-                if breakout is not None and cup is not None
-                else False
-            ),
-        )
-        if cup is not None
-        else "none"
-    )
-    bias = "bullish" if status in ("forming", "developing", "confirmed") else "neutral"
-    confidence = compute_confidence("cup_with_handle", status, handle, breakout, rs_score)
-    result = _payload(cup, handle, breakout, status, bias, confidence)
-    result["analysis_date"] = curr_date
-    return result
+    candidates = detect_all(df, atr_value)
+    primary, others = arbitrate(evaluate_candidates(df, candidates, atr_value, rs_score))
+    return _result(primary, others, curr_date)
 
 
 def analyze_oneil_setup(symbol: str, curr_date: str, look_back_days: int = 420, benchmark: str = "SPY") -> str:

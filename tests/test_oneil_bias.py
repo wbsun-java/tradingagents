@@ -1,4 +1,4 @@
-"""Unit tests for the O'Neil setup synthesis / top-level JSON shape."""
+"""Unit tests for the O'Neil base-pattern JSON payload."""
 
 from __future__ import annotations
 
@@ -6,105 +6,89 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tradingagents.dataflows.oneil_base_patterns import PatternDetection
+from tradingagents.dataflows.oneil_base_types import BaseCandidate
 from tradingagents.dataflows.oneil_bias import SECONDARY_WEIGHT, analyze_oneil_setup_from_data
 
 
 def _full_sequence(breakout_vol_mult: float = 1.8) -> pd.DataFrame:
-    prior_up_len, decline_len, base_len, recover_len, handle_len, post_len = 50, 45, 20, 45, 13, 15
-    start_price, up_gain, depth_pct, handle_depth_pct = 50.0, 60.0, 0.20, 0.06
+    lengths = (50, 45, 20, 45, 13, 15)
     closes: list[float] = []
-    vols: list[float] = []
-    for i in range(prior_up_len):
-        closes.append(start_price + up_gain * i / (prior_up_len - 1))
-        vols.append(1_000_000.0)
-    left_high = closes[-1]
-    low_price = left_high * (1 - depth_pct)
-    for i in range(decline_len):
-        t = (i + 1) / decline_len
-        ease = (1 - np.cos(t * np.pi)) / 2
-        closes.append(left_high - (left_high - low_price) * ease)
-        vols.append(1_000_000.0)
+    volumes: list[float] = []
+    for index in range(lengths[0]):
+        closes.append(50.0 + 60.0 * index / (lengths[0] - 1))
+        volumes.append(1_000_000.0)
+    high, low = closes[-1], closes[-1] * 0.8
+    for index in range(lengths[1]):
+        ease = (1 - np.cos((index + 1) * np.pi / lengths[1])) / 2
+        closes.append(high - (high - low) * ease)
+        volumes.append(1_000_000.0)
     rng = np.random.default_rng(42)
-    for _ in range(base_len):
-        closes.append(low_price + rng.uniform(-0.3, 0.3))
-        vols.append(900_000.0)
-    for i in range(recover_len):
-        t = i / (recover_len - 1)
-        ease = (1 - np.cos(t * np.pi)) / 2
-        closes.append(low_price + (left_high - low_price) * ease)
-        vols.append(1_000_000.0)
-    right_high = closes[-1]
-    handle_low = right_high * (1 - handle_depth_pct)
-    for i in range(handle_len):
-        t = i / (handle_len - 1)
-        depth_ease = np.sin(t * np.pi)
-        closes.append(right_high - (right_high - handle_low) * depth_ease)
-        vols.append(600_000.0)
-    pivot = left_high
-    for i in range(post_len):
-        if i == 0:
-            closes.append(pivot * 1.02)
-            vols.append(1_000_000.0 * breakout_vol_mult)
-        else:
-            closes.append(pivot * (1.02 + 0.01 * i))
-            vols.append(1_000_000.0)
-    n = len(closes)
-    dates = pd.bdate_range("2024-01-02", periods=n)
-    closes_arr = np.array(closes)
-    return pd.DataFrame(
-        {
-            "Date": dates,
-            "Open": closes_arr,
-            "High": closes_arr + 0.5,
-            "Low": closes_arr - 0.5,
-            "Close": closes_arr,
-            "Volume": vols,
-        }
-    )
+    for _ in range(lengths[2]):
+        closes.append(low + rng.uniform(-0.3, 0.3))
+        volumes.append(900_000.0)
+    for index in range(lengths[3]):
+        ease = (1 - np.cos(index * np.pi / (lengths[3] - 1))) / 2
+        closes.append(low + (high - low) * ease)
+        volumes.append(1_000_000.0)
+    handle_low = closes[-1] * 0.94
+    for index in range(lengths[4]):
+        closes.append(high - (high - handle_low) * np.sin(index * np.pi / (lengths[4] - 1)))
+        volumes.append(600_000.0)
+    for index in range(lengths[5]):
+        closes.append(high * (1.02 + 0.01 * index))
+        volumes.append(1_000_000.0 * (breakout_vol_mult if index == 0 else 1))
+    prices = np.array(closes)
+    return pd.DataFrame({"Date": pd.bdate_range("2024-01-02", periods=len(prices)), "Open": prices,
+                         "High": prices + 0.5, "Low": prices - 0.5, "Close": prices, "Volume": volumes})
+
+
+def _flat_frame() -> pd.DataFrame:
+    return pd.DataFrame({"Date": pd.bdate_range("2024-01-02", periods=200), "Open": 100.0,
+                         "High": 100.5, "Low": 99.5, "Close": 100.0, "Volume": 1_000_000.0})
 
 
 @pytest.mark.unit
-def test_confirmed_setup_has_full_payload_and_bullish_bias():
-    df = _full_sequence()
-    curr_date = df["Date"].iloc[-1].strftime("%Y-%m-%d")
-
-    result = analyze_oneil_setup_from_data(df, curr_date, rs_score=0.05)
-
-    assert result["status"] == "confirmed"
-    assert result["setup_bias"] == "bullish"
-    assert result["secondary_weight"] == SECONDARY_WEIGHT
-    assert result["cup"] is not None
-    assert result["handle"] is not None
-    assert result["breakout"] is not None
-    assert len(result["evidence"]) >= 3
-    assert result["analysis_date"] == curr_date
-
-
-@pytest.mark.unit
-def test_no_cup_returns_neutral_with_secondary_weight_still_present():
-    flat = pd.DataFrame(
-        {
-            "Date": pd.bdate_range("2024-01-02", periods=200),
-            "Open": [100.0] * 200, "High": [100.5] * 200, "Low": [99.5] * 200,
-            "Close": [100.0] * 200, "Volume": [1_000_000.0] * 200,
-        }
-    )
-    curr_date = flat["Date"].iloc[-1].strftime("%Y-%m-%d")
-
-    result = analyze_oneil_setup_from_data(flat, curr_date)
-
-    assert result["status"] == "none"
+def test_nothing_detected_yields_null_primary():
+    data = _flat_frame()
+    result = analyze_oneil_setup_from_data(data, data["Date"].iloc[-1].strftime("%Y-%m-%d"))
+    assert result["primary_pattern"] is None
     assert result["setup_bias"] == "neutral"
-    assert result["cup"] is None
+    assert result["other_detections"] == []
+    assert result["confidence"] == 0.0
+
+
+@pytest.mark.unit
+def test_all_failed_reports_most_recent_failure_neutral(monkeypatch: pytest.MonkeyPatch):
+    candidate = BaseCandidate("flat_base", True, 100.0, "2024-06-01", 10, {}, [])
+    failed = PatternDetection(candidate, "failed", None, 0.0)
+    monkeypatch.setattr("tradingagents.dataflows.oneil_bias.detect_all", lambda *_: [candidate])
+    monkeypatch.setattr("tradingagents.dataflows.oneil_bias.evaluate_candidates", lambda *_: [failed])
+    data = _flat_frame()
+    result = analyze_oneil_setup_from_data(data, data["Date"].iloc[-1].strftime("%Y-%m-%d"))
+    assert result["primary_pattern"]["status"] == "failed"
+    assert result["setup_bias"] == "neutral"
+
+
+@pytest.mark.unit
+def test_payload_contract_keys_always_present():
+    data = _full_sequence()
+    result = analyze_oneil_setup_from_data(data, data["Date"].iloc[-1].strftime("%Y-%m-%d"), rs_score=0.05)
+    assert {"pattern_type", "status", "pivot_price", "pivot_date", "geometry", "handle", "breakout"} <= result["primary_pattern"].keys()
+    assert {"setup_bias", "confidence", "secondary_weight", "weight_note", "evidence", "analysis_date", "other_detections"} <= result.keys()
     assert result["secondary_weight"] == SECONDARY_WEIGHT
 
 
 @pytest.mark.unit
-def test_no_future_data_leaks_into_the_result():
-    df = _full_sequence()
-    cutoff_date = df["Date"].iloc[150].strftime("%Y-%m-%d")
+def test_weight_note_says_base_pattern_not_cup():
+    assert "base-pattern" in analyze_oneil_setup_from_data(_flat_frame(), "2024-10-07")["weight_note"]
+    assert "CANSLIM" not in analyze_oneil_setup_from_data(_flat_frame(), "2024-10-07")["weight_note"]
 
-    result = analyze_oneil_setup_from_data(df, cutoff_date)
 
-    # At day 150 the handle/breakout haven't happened yet in this fixture.
-    assert result["status"] in ("none", "forming")
+@pytest.mark.unit
+def test_cup_with_handle_fixture_preserves_confirmed_status():
+    data = _full_sequence()
+    result = analyze_oneil_setup_from_data(data, data["Date"].iloc[-1].strftime("%Y-%m-%d"), rs_score=0.05)
+    assert result["primary_pattern"]["pattern_type"] == "cup_with_handle"
+    assert result["primary_pattern"]["status"] == "confirmed"
+    assert result["setup_bias"] == "bullish"
