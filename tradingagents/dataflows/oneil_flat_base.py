@@ -48,6 +48,8 @@ def detect_flat_base(df: pd.DataFrame, atr_value: float) -> BaseCandidate | None
         end_date = pd.Timestamp(df.at[end, "Date"]).strftime("%Y-%m-%d")
         pivot_date = pd.Timestamp(df.at[high_index, "Date"]).strftime("%Y-%m-%d")
         complete = duration >= FLAT_MIN_DAYS
+        if not complete and end != len(df) - 1:
+            continue
         candidates.append(
             BaseCandidate(
                 pattern_type="flat_base",

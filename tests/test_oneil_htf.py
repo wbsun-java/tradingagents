@@ -48,6 +48,22 @@ def test_flag_too_young_is_forming():
 
 
 @pytest.mark.unit
+def test_resolved_young_flag_is_not_forming():
+    df = _htf(flag_days=3)
+    flag_high = float(df["High"].iloc[-3:].max())
+    later = pd.DataFrame({
+        "Date": pd.bdate_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=4),
+        "Open": [flag_high + 2.0] * 4,
+        "High": [flag_high + 2.25] * 4,
+        "Low": [flag_high + 1.75] * 4,
+        "Close": [flag_high + 2.0] * 4,
+        "Volume": [1_500_000] * 4,
+    })
+
+    assert _detected(pd.concat((df, later), ignore_index=True)) is None
+
+
+@pytest.mark.unit
 def test_correction_too_deep_rejected():
     assert _detected(_htf(correction=0.35)) is None
 

@@ -53,6 +53,8 @@ def detect_high_tight_flag(df: pd.DataFrame, atr_value: float) -> BaseCandidate 
     flag_days = flag_end - pole_end
     if flag_days > HTF_FLAG_MAX_DAYS:
         return None
+    if flag_days < HTF_FLAG_MIN_DAYS and flag_end != len(df) - 1:
+        return None
     flag = df.iloc[pole_end + 1 : flag_end + 1]
     flag_high = float(flag["High"].max())
     flag_low = float(flag["Low"].min())

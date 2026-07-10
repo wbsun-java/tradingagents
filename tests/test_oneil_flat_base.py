@@ -52,6 +52,21 @@ def test_short_tight_range_is_forming():
 
 
 @pytest.mark.unit
+def test_old_short_range_is_not_forming():
+    df = _flat_base(tight_days=18)
+    breakout = pd.DataFrame({
+        "Date": pd.bdate_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=10),
+        "Open": np.linspace(140.0, 200.0, 10),
+        "High": np.linspace(140.5, 200.5, 10),
+        "Low": np.linspace(139.5, 199.5, 10),
+        "Close": np.linspace(140.0, 200.0, 10),
+        "Volume": 1_500_000.0,
+    })
+
+    assert _detected(pd.concat((df, breakout), ignore_index=True)) is None
+
+
+@pytest.mark.unit
 def test_deep_range_rejected():
     assert _detected(_flat_base(depth=0.25)) is None
 
