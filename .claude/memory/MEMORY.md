@@ -1,0 +1,8 @@
+- [Claude-architect workflow status](project_claude_architect_workflow.md) — "Claude architects, Codex executes, Gemini takes input"; 5-stage workflow, first pilot landed 2026-07-08
+- [agy --print + interactive TUI](feedback_agy_interactive_tui.md) — never route interactive CLI scenarios through Antigravity's agy --print, it hangs
+- [Analyze vs develop mode](feedback_analyze_vs_develop_mode.md) — disambiguate "run a stock analysis" from "change the codebase" before acting
+- [Market Analyst TA modules status](project_market_analyst_ta_modules.md) — Wyckoff fully complete (all 4 后续迭代 items); O'Neil CANSLIM next per user's sequencing
+- [Wyckoff downstream upstream-file approval](project_wyckoff_downstream_approval.md) — user approved editing 5 upstream agent-prompt files for the Wyckoff weight-extension feature only
+- [Avoid upfront tooling scaffolds](feedback_avoid_upfront_tooling_scaffolds.md) — user rejects elaborate speculative dev-workflow frameworks; grow from one validated gap at a time
+- [O'Neil CANSLIM feature status](project_oneil_canslim_feature_status.md) — cup-with-handle done, but undersells O'Neil's full methodology; open scope decision, resume next session
+- [codex-delegate background stdin hang](feedback_codex_background_stdin_hang.md) — always `< /dev/null` + stream (not `tail`) on backgrounded `codex exec`; verify session log appears early
