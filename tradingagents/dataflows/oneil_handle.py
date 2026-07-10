@@ -24,6 +24,8 @@ class HandleCandidate:
     end_index: int
     end_date: str
     low_price: float
+    high_index: int
+    high_price: float
     volume_ratio_vs_cup: float | None
     duration_days: int
     valid: bool
@@ -66,6 +68,8 @@ def detect_handle(
     handle_avg_vol = float(pd.to_numeric(window["Volume"], errors="coerce").mean())
     volume_ratio_vs_cup = handle_avg_vol / cup_avg_vol if cup_avg_vol else None
     midpoint = (cup.left_high_price + cup.low_price) / 2.0
+    high_index = int(window["High"].idxmax())
+    high_price = float(df.at[high_index, "High"])
 
     evidence: list[str] = []
     valid = True
@@ -87,6 +91,15 @@ def detect_handle(
             f"Handle duration of {duration_days} days is not shorter than the "
             f"{cup.duration_days}-day cup."
         )
+    split = (len(window) + 1) // 2
+    first_half_close = float(window["Close"].iloc[:split].mean())
+    second_half_close = float(window["Close"].iloc[split:].mean())
+    if second_half_close > first_half_close:
+        valid = False
+        evidence.append(
+            f"Handle drifted upward: second-half mean close {second_half_close:.2f} "
+            f"exceeded first-half mean close {first_half_close:.2f}."
+        )
     if valid:
         evidence.append(
             f"Handle formed in the cup's upper half (low {trough.price:.2f} above "
@@ -98,6 +111,8 @@ def detect_handle(
         end_index=trough.index,
         end_date=trough.date,
         low_price=trough.price,
+        high_index=high_index,
+        high_price=high_price,
         volume_ratio_vs_cup=volume_ratio_vs_cup,
         duration_days=duration_days,
         valid=valid,

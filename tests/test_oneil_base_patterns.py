@@ -12,7 +12,8 @@ from tradingagents.dataflows.oneil_base_patterns import (
     evaluate_candidates,
 )
 from tradingagents.dataflows.oneil_base_types import BaseCandidate
-from tradingagents.dataflows.oneil_cup import atr, prepare_ohlcv
+from tradingagents.dataflows.oneil_cup import CupCandidate, atr, prepare_ohlcv
+from tradingagents.dataflows.oneil_handle import HandleCandidate
 
 
 def _detection(pattern_type: str, status: str, confidence: float, date: str) -> PatternDetection:
@@ -69,3 +70,43 @@ def test_cup_without_handle_reported_as_developing():
     assert cups and cups[0].pattern_type == "cup_without_handle"
     detection = evaluate_candidates(df, cups, atr_value, None)[0]
     assert detection.status == "developing"
+
+
+@pytest.mark.unit
+def test_forming_cup_flows_through_as_forming():
+    from tests.test_oneil_cup_forming import _forming_cup
+
+    df = _forming_cup()
+    atr_value = float(atr(df).iloc[-1])
+    cups = [item for item in detect_all(df, atr_value) if item.pattern_type == "cup_without_handle"]
+
+    assert cups and cups[0].complete is False
+    detection = evaluate_candidates(df, cups, atr_value, None)[0]
+    assert detection.status == "forming"
+    assert detection.breakout is None
+
+
+@pytest.mark.unit
+def test_failed_completed_cup_does_not_mask_forming_cup(monkeypatch: pytest.MonkeyPatch):
+    import tradingagents.dataflows.oneil_base_patterns as patterns
+
+    df = _cup_without_handle()
+    cup = CupCandidate(10, "2024-01-16", 100.0, "2024-02-01", 70.0, 30, "2024-02-13", 30.0, 20)
+    invalid_handle = HandleCandidate(
+        "2024-02-14", 35, "2024-02-20", 60.0, 31, 99.0, 1.2, 6, False
+    )
+    forming = BaseCandidate("cup_without_handle", False, 150.0, "2024-01-02", len(df) - 1, {}, [])
+    monkeypatch.setattr(patterns, "detect_cup", lambda *_: cup)
+    monkeypatch.setattr(patterns, "detect_handle", lambda *_: invalid_handle)
+    monkeypatch.setattr(patterns, "detect_forming_cup", lambda *_: forming)
+    monkeypatch.setattr(patterns, "detect_flat_base", lambda *_: None)
+    monkeypatch.setattr(patterns, "detect_double_bottom", lambda *_: None)
+    monkeypatch.setattr(patterns, "detect_ascending_base", lambda *_: None)
+    monkeypatch.setattr(patterns, "detect_high_tight_flag", lambda *_: None)
+
+    cups = detect_all(df, 1.0)
+    primary, others = arbitrate(evaluate_candidates(df, cups, 1.0, None))
+
+    assert len(cups) == 2
+    assert primary is not None and primary.candidate is forming
+    assert len(others) == 1 and others[0].status == "failed"

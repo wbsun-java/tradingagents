@@ -17,6 +17,7 @@ from tradingagents.dataflows.oneil_breakout import (
     find_breakout,
 )
 from tradingagents.dataflows.oneil_cup import detect_cup
+from tradingagents.dataflows.oneil_cup_forming import detect_forming_cup
 from tradingagents.dataflows.oneil_double_bottom import detect_double_bottom
 from tradingagents.dataflows.oneil_flat_base import detect_flat_base
 from tradingagents.dataflows.oneil_handle import detect_handle
@@ -35,45 +36,48 @@ class PatternDetection:
     confidence: float
 
 
-def _cup_candidate(df: pd.DataFrame, atr_value: float) -> BaseCandidate | None:
+def _cup_candidates(df: pd.DataFrame, atr_value: float) -> list[BaseCandidate]:
+    """Return completed and still-forming cup candidates independently."""
+    candidates: list[BaseCandidate] = []
     cup = detect_cup(df, atr_value)
-    if cup is None:
-        return None
-    handle = detect_handle(df, cup, atr_value)
-    pattern_type = "cup_with_handle" if handle is not None else "cup_without_handle"
-    complete_index = handle.end_index if handle is not None else cup.right_high_index
-    geometry = {
-        "start_date": cup.left_high_date,
-        "left_high": cup.left_high_price,
-        "low_date": cup.low_date,
-        "low_price": cup.low_price,
-        "right_high_date": cup.right_high_date,
-        "depth_pct": cup.depth_pct * 100,
-        "duration_days": cup.duration_days,
-    }
-    evidence = [*cup.evidence, *(handle.evidence if handle is not None else [])]
-    return BaseCandidate(
-        pattern_type=pattern_type,
-        complete=True,
-        pivot_price=cup.left_high_price,
-        pivot_date=cup.left_high_date,
-        complete_index=complete_index,
-        geometry=geometry,
-        evidence=evidence,
-        handle=handle,
-    )
+    if cup is not None:
+        handle = detect_handle(df, cup, atr_value)
+        pattern_type = "cup_with_handle" if handle is not None else "cup_without_handle"
+        complete_index = handle.end_index if handle is not None else cup.right_high_index
+        pivot_price = handle.high_price if handle is not None else cup.left_high_price
+        pivot_index = handle.high_index if handle is not None else cup.left_high_index
+        pivot_date = pd.Timestamp(df.at[pivot_index, "Date"]).strftime("%Y-%m-%d")
+        geometry = {
+            "start_date": cup.left_high_date,
+            "left_high": cup.left_high_price,
+            "low_date": cup.low_date,
+            "low_price": cup.low_price,
+            "right_high_date": cup.right_high_date,
+            "depth_pct": cup.depth_pct * 100,
+            "duration_days": cup.duration_days,
+        }
+        evidence = [*cup.evidence, *(handle.evidence if handle is not None else [])]
+        candidates.append(BaseCandidate(
+            pattern_type=pattern_type, complete=True, pivot_price=pivot_price,
+            pivot_date=pivot_date, complete_index=complete_index,
+            geometry=geometry, evidence=evidence, handle=handle,
+        ))
+    forming = detect_forming_cup(df, atr_value)
+    if forming is not None:
+        candidates.append(forming)
+    return candidates
 
 
 def detect_all(df: pd.DataFrame, atr_value: float) -> list[BaseCandidate]:
     """Run each base detector and return every detected candidate."""
     detectors = (
-        _cup_candidate,
         detect_flat_base,
         detect_double_bottom,
         detect_ascending_base,
         detect_high_tight_flag,
     )
-    return [candidate for detector in detectors if (candidate := detector(df, atr_value)) is not None]
+    cups = _cup_candidates(df, atr_value)
+    return cups + [candidate for detector in detectors if (candidate := detector(df, atr_value)) is not None]
 
 
 def evaluate_candidates(
