@@ -4,5 +4,14 @@
 - [Market Analyst TA modules status](project_market_analyst_ta_modules.md) — Wyckoff fully complete (all 4 后续迭代 items); O'Neil CANSLIM next per user's sequencing
 - [Wyckoff downstream upstream-file approval](project_wyckoff_downstream_approval.md) — user approved editing 5 upstream agent-prompt files for the Wyckoff weight-extension feature only
 - [Avoid upfront tooling scaffolds](feedback_avoid_upfront_tooling_scaffolds.md) — user rejects elaborate speculative dev-workflow frameworks; grow from one validated gap at a time
-- [O'Neil CANSLIM feature status](project_oneil_canslim_feature_status.md) — cup-with-handle done, but undersells O'Neil's full methodology; open scope decision, resume next session
+- [O'Neil CANSLIM feature status](project_oneil_canslim_feature_status.md) — cup-with-handle era status; superseded by the O'Neil stage-4 status entry below
 - [codex-delegate background stdin hang](feedback_codex_background_stdin_hang.md) — always `< /dev/null` + stream (not `tail`) on backgrounded `codex exec`; verify session log appears early
+- [Wyckoff range: proximity not recency](feedback_wyckoff_range_recency.md) — validity of a detected range must use price proximity, not pivot-touch recency
+- [Wyckoff climax: search raw bars, not just boundary pivots](feedback_wyckoff_climax_search_window.md) — real capitulation bars often print away from the settled boundary cluster
+- [Wyckoff: narrate volume in evidence text](feedback_wyckoff_volume_evidence.md) — volume characteristics must be stated explicitly, not left as a silent JSON field; widening a search window needs its tie-break rechecked too
+- [Don't auto-commit specs/plans](feedback_no_auto_commit_specs.md) — wait for explicit go-ahead even when a skill's default steps say to commit
+- [Model role split](project_model_role_split.md) — Fable 5 architects only; Codex 5.6 sol/terra/luna does all coding, tier chosen per task via `-m`
+- [codex 0.144.0 code_mode_host broken](feedback_codex_code_mode_host_missing.md) — pass `--disable code_mode_host` on every codex exec; exit 0 with no changes ≠ success, read the last-message file
+- [codex exec resume flags](reference_codex_resume_flags.md) — resume rejects `-s`/`-C`; use `-c sandbox_mode=...`, `-m`, `-o`, cwd-based session filtering
+- [Pattern starts at the high](feedback_pattern_start_at_high.md) — the decline off the first high is the pattern's first leg; anchor gates at the high and forbid interior highs above it
+- [O'Neil stage-4 status](project_oneil_stage4_status.md) — 8 tasks committed; cup rim-containment + double-bottom L1-anchor bugs found; user to pick first fix (cup recommended)
