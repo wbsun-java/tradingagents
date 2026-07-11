@@ -64,22 +64,23 @@ def test_late_apex_breakout_is_flagged_but_still_confirmed():
 
 
 @pytest.mark.unit
-def test_post_apex_move_does_not_confirm_an_expired_triangle():
+def test_post_apex_breakout_inside_window_is_confirmed_with_flag():
     closes = _flat(100.0, 70)
     closes[60:] = [103.0] * (70 - 60)
 
     result = _classify(closes)
 
-    assert result.status == "failed"
-    assert result.breakout_index is None
-    assert result.breakout_progress is None
-    assert result.risk_flags == ["triangle_expired_at_apex"]
-    assert result.upper_level == pytest.approx(result.lower_level)
+    assert result.status == "confirmed"
+    assert result.breakout_index == 60
+    assert result.breakout_progress == pytest.approx((60 - 5) / 52.5)
+    assert result.risk_flags == ["post_apex_breakout"]
+    assert result.timing_adjustment == -0.4
     assert result.upper_level == pytest.approx(99.5)
+    assert result.lower_level == pytest.approx(99.5)
 
 
 @pytest.mark.unit
-def test_no_breakout_at_apex_expires_the_triangle_immediately():
+def test_no_breakout_through_the_post_apex_window_expires_the_triangle():
     closes = _flat(99.5, 75)
 
     result = _classify(closes, buffer=3.0)
