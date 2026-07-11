@@ -96,8 +96,6 @@ def detect_double_bottom(df: pd.DataFrame, atr_value: float) -> BaseCandidate | 
         if structure is None:
             continue
         first, middle, second, leg_volume_evidence = structure
-        if not contained_below(df, peak.index, peak.price, second.index, atr_value):
-            continue
         behavior, low_evidence = classify_second_low(first, second, atr_value)
         if second.price < first.price and not undercut_is_valid(
             df, first, second, atr_value
