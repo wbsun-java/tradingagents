@@ -8,6 +8,7 @@ import pytest
 
 from tradingagents.dataflows.oneil_breakout import (
     BREAKOUT_VOLUME_RATIO,
+    PREMATURE_CONTINUATION_PENALTY,
     UNDERCUT_BONUS,
     BreakoutEvent,
     breakout_reversed,
@@ -203,3 +204,22 @@ def test_undercut_bonus_applies_only_when_set():
     base = compute_confidence("double_bottom_base", "developing", None, None, None)
     undercut = compute_confidence("double_bottom_base", "developing", None, None, None, undercut=True)
     assert undercut - base == pytest.approx(UNDERCUT_BONUS)
+
+
+@pytest.mark.unit
+def test_premature_continuation_lowers_confidence():
+    base = compute_confidence("flat_base", "developing", None, None, None)
+    penalized = compute_confidence(
+        "flat_base", "developing", None, None, None,
+        continuation_state="premature_continuation",
+    )
+    assert base - penalized == pytest.approx(PREMATURE_CONTINUATION_PENALTY)
+
+
+@pytest.mark.unit
+def test_confirmed_or_missing_continuation_state_does_not_penalize():
+    base = compute_confidence("flat_base", "developing", None, None, None)
+    for state in ("confirmed_continuation", "no_prior_stage", None):
+        assert compute_confidence(
+            "flat_base", "developing", None, None, None, continuation_state=state
+        ) == base

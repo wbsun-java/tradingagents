@@ -30,6 +30,7 @@ PATTERN_CONFIDENCE_BONUS: dict[PatternType, float] = {
     "cup_without_handle": -0.05,
 }
 UNDERCUT_BONUS = 0.05
+PREMATURE_CONTINUATION_PENALTY = 0.05
 
 
 @dataclass
@@ -123,6 +124,7 @@ def compute_confidence(
     breakout: BreakoutEvent | None,
     rs_score: float | None,
     undercut: bool = False,
+    continuation_state: str | None = None,
 ) -> float:
     """Score a live base from status, pattern quality, volume, and relative strength."""
     if status in ("none", "failed"):
@@ -131,6 +133,8 @@ def compute_confidence(
     base += PATTERN_CONFIDENCE_BONUS[pattern_type]
     if undercut:
         base += UNDERCUT_BONUS
+    if continuation_state == "premature_continuation":
+        base -= PREMATURE_CONTINUATION_PENALTY
     if handle is not None and handle.valid and handle.volume_ratio_vs_cup is not None:
         base += max(0.0, min(0.15, (1.0 - handle.volume_ratio_vs_cup) * 0.3))
     if breakout is not None:
