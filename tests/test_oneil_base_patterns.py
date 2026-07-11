@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from tests.oneil_base_chain_fixtures import chained_flat_bases, single_flat_base
 from tradingagents.dataflows.oneil_base_patterns import (
     PatternDetection,
     arbitrate,
@@ -164,3 +165,41 @@ def test_hand_built_candidate_without_new_fields_still_works():
     result = evaluate_candidates(df, [candidate], 1.0, None)
     assert result[0].candidate is candidate
     assert result[0].status == "developing"
+
+
+def _flat_base_detection(df: pd.DataFrame) -> PatternDetection:
+    atr_value = float(atr(df).iloc[-1])
+    candidates = [c for c in detect_all(df, atr_value) if c.pattern_type == "flat_base"]
+    assert candidates, "expected a flat_base candidate"
+    return evaluate_candidates(df, candidates, atr_value, None)[0]
+
+
+@pytest.mark.unit
+def test_confirmed_continuation_flat_base():
+    df, _, _, peak2 = chained_flat_bases(1.25)
+    detection = _flat_base_detection(df)
+    assert detection.candidate.pivot_price == pytest.approx(peak2, abs=0.6)
+    assert detection.candidate.continuation_state == "confirmed_continuation"
+    assert any("continuation base" in line for line in detection.candidate.evidence)
+
+
+@pytest.mark.unit
+def test_premature_continuation_flat_base_is_flagged():
+    df, _, _, _ = chained_flat_bases(1.08)
+    detection = _flat_base_detection(df)
+    assert detection.candidate.continuation_state == "premature_continuation"
+    assert any("20% continuation threshold" in line for line in detection.candidate.evidence)
+
+
+@pytest.mark.unit
+def test_premature_continuation_scores_lower_than_confirmed():
+    confirmed = _flat_base_detection(chained_flat_bases(1.25)[0])
+    premature = _flat_base_detection(chained_flat_bases(1.08)[0])
+    assert premature.confidence < confirmed.confidence
+
+
+@pytest.mark.unit
+def test_no_prior_stage_is_not_penalized():
+    detection = _flat_base_detection(single_flat_base())
+    assert detection.candidate.continuation_state == "no_prior_stage"
+    assert any("first-stage base" in line for line in detection.candidate.evidence)

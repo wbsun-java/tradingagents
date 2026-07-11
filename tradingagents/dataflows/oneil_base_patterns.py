@@ -7,8 +7,9 @@ from dataclasses import dataclass
 import pandas as pd
 
 from tradingagents.dataflows.oneil_ascending_base import detect_ascending_base
+from tradingagents.dataflows.oneil_base_chain import classify_continuation
 from tradingagents.dataflows.oneil_base_lifecycle import base_is_stale, base_structure_broken
-from tradingagents.dataflows.oneil_base_types import BaseCandidate
+from tradingagents.dataflows.oneil_base_types import PRIOR_UPTREND_MIN_BARS, BaseCandidate
 from tradingagents.dataflows.oneil_breakout import (
     BreakoutEvent,
     Status,
@@ -88,6 +89,8 @@ def evaluate_candidates(
     candidates: list[BaseCandidate],
     atr_value: float,
     rs_score: float | None,
+    *,
+    apply_chaining: bool = True,
 ) -> list[PatternDetection]:
     """Apply the common breakout engine once to each candidate."""
     detections: list[PatternDetection] = []
@@ -95,6 +98,19 @@ def evaluate_candidates(
     for candidate in candidates:
         if base_is_stale(candidate, last_bar):
             continue
+        if (
+            apply_chaining
+            and candidate.pattern_type == "flat_base"
+            and candidate.start_index is not None
+        ):
+            prior = _find_prior_confirmed_breakout(df, candidate.start_index, atr_value, rs_score)
+            state, evidence_text = classify_continuation(
+                prior.candidate.pivot_price if prior is not None else None,
+                prior.candidate.pivot_date if prior is not None else None,
+                candidate.pivot_price,
+            )
+            candidate.continuation_state = state
+            candidate.evidence.append(evidence_text)
         breakout = (
             find_breakout(df, candidate.pivot_price, candidate.complete_index + 1, atr_value)
             if candidate.complete
@@ -118,10 +134,26 @@ def evaluate_candidates(
             PatternDetection(
                 candidate, status, breakout,
                 compute_confidence(candidate.pattern_type, status, candidate.handle, breakout,
-                                   rs_score, undercut=candidate.undercut),
+                                   rs_score, undercut=candidate.undercut,
+                                   continuation_state=candidate.continuation_state),
             )
         )
     return detections
+
+
+def _find_prior_confirmed_breakout(
+    df: pd.DataFrame, before_index: int, atr_value: float, rs_score: float | None
+) -> PatternDetection | None:
+    """Return the most recent confirmed breakout strictly before ``before_index``."""
+    if before_index < PRIOR_UPTREND_MIN_BARS:
+        return None
+    prefix = df.iloc[:before_index]
+    candidates = detect_all(prefix, atr_value)
+    detections = evaluate_candidates(prefix, candidates, atr_value, rs_score, apply_chaining=False)
+    confirmed = [item for item in detections if item.status == "confirmed"]
+    if not confirmed:
+        return None
+    return max(confirmed, key=lambda item: item.candidate.pivot_date)
 
 
 def arbitrate(detections: list[PatternDetection]) -> tuple[PatternDetection | None, list[PatternDetection]]:

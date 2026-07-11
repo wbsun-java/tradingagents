@@ -42,6 +42,7 @@ class BaseCandidate:
     evidence: list[str]
     handle: HandleCandidate | None = None
     undercut: bool = False
+    continuation_state: str | None = None
     start_index: int | None = None
     base_low_price: float | None = None
 
