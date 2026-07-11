@@ -53,3 +53,13 @@ def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = 
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
 
+
+def get_earnings(ticker: str, curr_date: str = None):
+    """Retrieve reported quarterly/annual EPS history using Alpha Vantage EARNINGS.
+
+    Deliberately not passed through _filter_reports_by_date: that gate uses
+    fiscalDateEnding and would leak quarters that ended but were not yet
+    reported. Point-in-time filtering by reportedDate happens in
+    canslim_earnings_data.load_earnings_history.
+    """
+    return _make_api_request("EARNINGS", {"symbol": ticker})
