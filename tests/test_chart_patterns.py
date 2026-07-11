@@ -228,16 +228,36 @@ def test_late_triangle_breakout_that_reenters_is_failed():
 
 
 @pytest.mark.unit
-def test_post_apex_move_expires_triangle_through_full_pipeline():
-    # Price sits flat at the theoretical apex value for a while (no new
-    # pivots form on a flat run) before a late move well past the original
-    # trendlines — this exercises the extracted triangle_breakout module via
-    # the full _triangle_pattern -> analyze_chart_patterns_from_data path.
+def test_post_apex_breakout_confirms_with_apex_anchored_prices():
+    # Flat at the apex value until bar 64 (no pivots form on a flat run), then a
+    # jump at bar 65 — inside the 8-bar post-apex window after the bar-60.5 apex.
     anchors = [(0, 100), (5, 110), (10, 90), (15, 108), (20, 92), (25, 106), (30, 94)]
     closes = _interpolate_anchors(anchors)
     closes += [99.5] * (65 - len(closes))
     closes += [112.0] * 6
-    data = _ohlcv(closes, breakout_volume_index=len(closes) - 3)
+    data = _ohlcv(closes, breakout_volume_index=65)
+
+    result = patterns.analyze_chart_patterns_from_data(
+        data, data["Date"].iloc[-1].strftime("%Y-%m-%d"), pivot_span=3
+    )
+    signal = _find(result, "symmetrical_triangle")
+
+    assert signal["status"] == "confirmed"
+    assert "post_apex_breakout" in signal["risk_flags"]
+    assert signal["levels"]["breakout_progress"] == pytest.approx(1.0811, abs=1e-3)
+    assert signal["levels"]["upper_trendline"] == signal["levels"]["lower_trendline"]
+    assert signal["invalidation_price"] == pytest.approx(99.5, abs=0.05)
+    # The measured move anchors at the apex price, not at the 112.0 breakout close.
+    assert signal["target_price"] == pytest.approx(99.5 + 22.2, abs=0.1)
+    assert signal["confidence"] < 0.5
+
+
+@pytest.mark.unit
+def test_flat_drift_past_the_window_expires_triangle_through_full_pipeline():
+    anchors = [(0, 100), (5, 110), (10, 90), (15, 108), (20, 92), (25, 106), (30, 94)]
+    closes = _interpolate_anchors(anchors)
+    closes += [99.5] * (75 - len(closes))
+    data = _ohlcv(closes)
 
     result = patterns.analyze_chart_patterns_from_data(
         data, data["Date"].iloc[-1].strftime("%Y-%m-%d"), pivot_span=3

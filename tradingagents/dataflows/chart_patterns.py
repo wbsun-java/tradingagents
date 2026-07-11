@@ -558,10 +558,14 @@ def _triangle_pattern(
     target = None
     invalidation = None
     breakout_price = float(df.at[breakout_index, "Close"]) if breakout_index is not None else None
+    # Post-apex breakouts anchor the measured move at the apex price (both frozen
+    # levels equal it); extending from the breakout close would inflate the target.
     if direction == "bullish" and status == "confirmed" and breakout_price is not None:
-        target, invalidation = breakout_price + start_gap, lower_level
+        anchor = upper_level if "post_apex_breakout" in risk_flags else breakout_price
+        target, invalidation = anchor + start_gap, lower_level
     elif direction == "bearish" and status == "confirmed" and breakout_price is not None:
-        target, invalidation = breakout_price - start_gap, upper_level
+        anchor = lower_level if "post_apex_breakout" in risk_flags else breakout_price
+        target, invalidation = anchor - start_gap, upper_level
 
     convergence = 1 - formation_gap / start_gap
     confidence = 0.55 + convergence * 0.15 + breakout.timing_adjustment
