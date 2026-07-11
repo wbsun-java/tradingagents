@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+from tradingagents.dataflows.canslim_earnings import score_canslim_ca
+from tradingagents.dataflows.canslim_earnings_data import load_earnings_history
 from tradingagents.dataflows.oneil_base_patterns import (
     PatternDetection,
     arbitrate,
@@ -113,6 +115,18 @@ def analyze_oneil_setup_from_data(data: pd.DataFrame, curr_date: str, look_back_
     return _result(primary, others, curr_date)
 
 
+def _canslim_earnings_payload(symbol: str, curr_date: str) -> dict[str, Any]:
+    """Best-effort C+A read; a fundamentals outage must never break the technical read."""
+    try:
+        return score_canslim_ca(load_earnings_history(symbol, curr_date))
+    except Exception as exc:
+        reason = f"unavailable: {exc}"
+        return {
+            "c": {"verdict": "unavailable", "growth_pct": None, "acceleration": None, "evidence": reason},
+            "a": {"verdict": "unavailable", "growth_pct": None, "evidence": reason},
+        }
+
+
 def analyze_oneil_setup(symbol: str, curr_date: str, look_back_days: int = 420, benchmark: str = "SPY") -> str:
     """Load cutoff-safe OHLCV and return a formatted JSON O'Neil setup report."""
     data = load_ohlcv(symbol, curr_date)
@@ -125,4 +139,5 @@ def analyze_oneil_setup(symbol: str, curr_date: str, look_back_days: int = 420, 
     rs_score = relative_strength_score(prepared, benchmark_df) if benchmark_df is not None else None
     result = analyze_oneil_setup_from_data(data, curr_date, look_back_days, rs_score)
     result["symbol"] = symbol.upper()
+    result["canslim_earnings"] = _canslim_earnings_payload(symbol, curr_date)
     return json.dumps(result, indent=2, ensure_ascii=False)

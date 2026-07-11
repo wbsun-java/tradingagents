@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from tradingagents.dataflows.canslim_earnings_data import AnnualEps, EarningsHistory, QuarterEps
 from tradingagents.dataflows.oneil_base_patterns import PatternDetection
 from tradingagents.dataflows.oneil_base_types import BaseCandidate
-from tradingagents.dataflows.oneil_bias import SECONDARY_WEIGHT, analyze_oneil_setup_from_data
+from tradingagents.dataflows.oneil_bias import (
+    SECONDARY_WEIGHT,
+    analyze_oneil_setup,
+    analyze_oneil_setup_from_data,
+)
 
 
 def _full_sequence(breakout_vol_mult: float = 1.8) -> pd.DataFrame:
@@ -92,3 +99,50 @@ def test_cup_with_handle_fixture_preserves_confirmed_status():
     assert result["primary_pattern"]["pattern_type"] == "cup_with_handle"
     assert result["primary_pattern"]["status"] == "confirmed"
     assert result["setup_bias"] == "bullish"
+
+
+@pytest.mark.unit
+def test_canslim_key_degrades_when_fetch_fails(monkeypatch):
+    data = _flat_frame()
+    curr = data["Date"].iloc[-1].strftime("%Y-%m-%d")
+    monkeypatch.setattr(
+        "tradingagents.dataflows.oneil_bias.load_ohlcv", lambda symbol, curr_date: data
+    )
+    def _boom(symbol, curr_date, config=None):
+        raise RuntimeError("no earnings vendor")
+    monkeypatch.setattr("tradingagents.dataflows.oneil_bias.load_earnings_history", _boom)
+    result = json.loads(analyze_oneil_setup("TEST", curr))
+    assert result["canslim_earnings"]["c"]["verdict"] == "unavailable"
+    assert "no earnings vendor" in result["canslim_earnings"]["c"]["evidence"]
+    assert result["canslim_earnings"]["a"]["verdict"] == "unavailable"
+    assert result["setup_bias"] == "neutral"  # technical payload intact
+
+
+@pytest.mark.unit
+def test_canslim_key_scores_when_history_available(monkeypatch):
+    data = _flat_frame()
+    curr = data["Date"].iloc[-1].strftime("%Y-%m-%d")
+    monkeypatch.setattr(
+        "tradingagents.dataflows.oneil_bias.load_ohlcv", lambda symbol, curr_date: data
+    )
+    from datetime import date, timedelta
+    newest = date(2024, 9, 25)
+    quarters = [
+        QuarterEps(None, (newest - timedelta(days=91 * i)).isoformat(), eps)
+        for i, eps in enumerate([2.00, 1.60, 1.30, 1.10, 1.20, 1.10, 1.00, 1.00])
+    ]
+    annual = [AnnualEps(f"{2023 - i}-09-30", eps) for i, eps in enumerate([2.20, 1.70, 1.30, 1.00])]
+    monkeypatch.setattr(
+        "tradingagents.dataflows.oneil_bias.load_earnings_history",
+        lambda symbol, curr_date, config=None: EarningsHistory(quarters, annual),
+    )
+    result = json.loads(analyze_oneil_setup("TEST", curr))
+    assert result["canslim_earnings"]["c"]["verdict"] == "pass"
+    assert result["canslim_earnings"]["a"]["verdict"] == "pass"
+
+
+@pytest.mark.unit
+def test_frame_based_entry_point_has_no_canslim_key():
+    data = _flat_frame()
+    result = analyze_oneil_setup_from_data(data, data["Date"].iloc[-1].strftime("%Y-%m-%d"))
+    assert "canslim_earnings" not in result
