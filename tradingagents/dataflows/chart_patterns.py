@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from tradingagents.dataflows.entry_assessment import assess_entry
+from tradingagents.dataflows.entry_types import EntryAssessment
 from tradingagents.dataflows.false_break_patterns import (
     apply_parent_side_effects,
     build_false_break_signal,
@@ -55,6 +57,7 @@ class PricePattern:
     volume_confirmed: bool | None
     evidence: list[str]
     risk_flags: list[str] = field(default_factory=list)
+    entry_assessment: EntryAssessment | None = None
 
 
 def _round(value: float | None) -> float | None:
@@ -746,6 +749,9 @@ def analyze_chart_patterns_from_data(
     patterns.extend(_double_patterns(df, pivots, atr_value, pivot_span))
     patterns.extend(_rectangle_pattern(df, pivots, atr_value))
     patterns.extend(_triangle_pattern(df, pivots, atr_value))
+
+    for pattern in patterns:
+        pattern.entry_assessment = assess_entry(df, pattern, atr_value, current)
 
     # Keep current/recent setups first and avoid flooding the analyst context.
     status_order = {"confirmed": 0, "forming": 1, "failed": 2}

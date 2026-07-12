@@ -187,3 +187,21 @@ def test_starting_peak_instruction_reaches_the_prompt(monkeypatch):
     create_market_analyst(_fake_llm())(_make_state())
 
     assert "starting peak" in _system_content()
+
+
+@pytest.mark.unit
+def test_entry_assessment_guidance_reaches_the_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_wyckoff_structure",
+        lambda *_args: '{"phase_bias":"neutral"}',
+    )
+    monkeypatch.setattr(
+        "tradingagents.agents.analysts.market_analyst.analyze_oneil_setup",
+        lambda *_args: '{"primary_pattern":null,"setup_bias":"neutral","other_detections":[]}',
+    )
+
+    create_market_analyst(_fake_llm())(_make_state())
+
+    content = _system_content()
+    assert "entry_assessment.state" in content
+    assert "never upgrade an `observe`" in content
