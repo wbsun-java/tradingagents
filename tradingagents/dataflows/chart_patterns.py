@@ -19,9 +19,15 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from tradingagents.dataflows.false_break_patterns import (
+    apply_parent_side_effects,
+    build_false_break_signal,
+)
+from tradingagents.dataflows.false_break_types import FalseBreakContext
 from tradingagents.dataflows.stockstats_utils import load_ohlcv
 from tradingagents.dataflows.trendline_fit import resistance_line, support_line
 from tradingagents.dataflows.triangle_breakout import classify_triangle_breakout
+from tradingagents.dataflows.triangle_post_apex import post_apex_window_bars
 
 PatternStatus = Literal["forming", "confirmed", "failed"]
 PatternDirection = Literal["bullish", "bearish", "neutral"]
@@ -175,7 +181,7 @@ def _level_breakout_patterns(
 ) -> list[PricePattern]:
     """Find the most recent confirmed or failed break of a repeated level."""
     buffer = atr_value * 0.2
-    candidates: list[tuple[int, PricePattern]] = []
+    candidates: list[tuple[int, FalseBreakContext | None, PricePattern]] = []
     for cluster in clusters:
         touches = cluster["pivots"]
         if len(touches) < 2:
@@ -203,9 +209,24 @@ def _level_breakout_patterns(
             pattern_name = "resistance_breakout" if direction == "above" else "support_breakdown"
             pattern_direction: PatternDirection = "bullish" if direction == "above" else "bearish"
             volume_confirmed = _volume_confirmation(df, crossing_index)
+            false_break_ctx = None
+            if status == "failed":
+                false_break_ctx = FalseBreakContext(
+                    breakout_index=crossing_index,
+                    direction="bullish" if direction == "above" else "bearish",
+                    high_slope=0.0,
+                    high_intercept=level,
+                    low_slope=0.0,
+                    low_intercept=level,
+                    apex_index=math.inf,
+                    buffer=buffer,
+                    window_bars=0,
+                    parent_pattern=pattern_name,
+                )
             candidates.append(
                 (
                     crossing_index,
+                    false_break_ctx,
                     PricePattern(
                         pattern=pattern_name,
                         status=status,
@@ -250,11 +271,18 @@ def _level_breakout_patterns(
     if not candidates:
         return []
     # One most-recent signal in each direction is enough for the analyst.
-    output = []
+    output: list[PricePattern] = []
     for name in ("resistance_breakout", "support_breakdown"):
-        matching = [item for item in candidates if item[1].pattern == name]
-        if matching:
-            output.append(max(matching, key=lambda item: item[0])[1])
+        matching = [item for item in candidates if item[2].pattern == name]
+        if not matching:
+            continue
+        _, ctx, parent = max(matching, key=lambda item: item[0])
+        output.append(parent)
+        if ctx is not None:
+            apply_parent_side_effects(parent)
+            signal = build_false_break_signal(df, ctx)
+            if signal is not None:
+                output.append(signal)
     return output
 
 
@@ -271,6 +299,7 @@ def _double_patterns(
     ):
         candidates = [pivot for pivot in pivots if pivot.kind == kind]
         best: PricePattern | None = None
+        best_ctx: FalseBreakContext | None = None
         best_second_index = -1
         for first_index, first in enumerate(candidates):
             for second in candidates[first_index + 1 :]:
@@ -338,6 +367,8 @@ def _double_patterns(
                     confidence = min(confidence, 0.55)
 
                 target = neckline + depth if kind == "low" else neckline - depth
+                if status == "failed":
+                    target = None
                 pattern = PricePattern(
                     pattern=name,
                     status=status,
@@ -369,14 +400,39 @@ def _double_patterns(
                         ),
                     ],
                 )
+                candidate_ctx = None
+                if breakout_failed and breakout_index is not None:
+                    candidate_ctx = FalseBreakContext(
+                        breakout_index=breakout_index,
+                        direction="bullish" if kind == "low" else "bearish",
+                        high_slope=0.0,
+                        high_intercept=neckline,
+                        low_slope=0.0,
+                        low_intercept=neckline,
+                        apex_index=math.inf,
+                        buffer=buffer,
+                        window_bars=0,
+                        parent_pattern=name,
+                        target_price=(
+                            min(first.price, second.price)
+                            if kind == "low"
+                            else max(first.price, second.price)
+                        ),
+                    )
                 if second.index > best_second_index:
                     best = pattern
+                    best_ctx = candidate_ctx
                     best_second_index = second.index
 
         if best is not None:
             # At most one recent signal of each double-pattern type keeps the
             # tool output compact enough for downstream LLM context.
             patterns.append(best)
+            if best_ctx is not None:
+                apply_parent_side_effects(best)
+                signal = build_false_break_signal(df, best_ctx)
+                if signal is not None:
+                    patterns.append(signal)
     return patterns
 
 
@@ -384,7 +440,7 @@ def _rectangle_pattern(
     df: pd.DataFrame,
     pivots: list[Pivot],
     atr_value: float,
-) -> PricePattern | None:
+) -> list[PricePattern]:
     window_start = max(0, len(df) - 80)
     recent_pivots = [pivot for pivot in pivots if pivot.index >= window_start]
     tolerance = max(atr_value * 0.6, float(df["Close"].iloc[-1]) * 0.006)
@@ -397,7 +453,7 @@ def _rectangle_pattern(
     high_clusters = [cluster for cluster in high_clusters if len(cluster["pivots"]) >= 2]
     low_clusters = [cluster for cluster in low_clusters if len(cluster["pivots"]) >= 2]
     if not high_clusters or not low_clusters:
-        return None
+        return []
 
     resistance = max(high_clusters, key=lambda cluster: (len(cluster["pivots"]), cluster["price"]))
     support = max(low_clusters, key=lambda cluster: (len(cluster["pivots"]), -cluster["price"]))
@@ -406,12 +462,12 @@ def _rectangle_pattern(
     width = upper - lower
     middle = (upper + lower) / 2
     if width < atr_value * 2 or width / middle > 0.18:
-        return None
+        return []
 
     all_touches = sorted(resistance["pivots"] + support["pivots"], key=lambda pivot: pivot.index)
     start_index = all_touches[0].index
     if all_touches[-1].index - start_index < 12:
-        return None
+        return []
 
     buffer = atr_value * 0.2
     up_break = _breakout_after(df, all_touches[-1].index + 1, upper, buffer, "above")
@@ -450,7 +506,7 @@ def _rectangle_pattern(
 
     touch_count = len(resistance["pivots"]) + len(support["pivots"])
     confidence = min(0.9, 0.48 + min(touch_count, 8) * 0.04 + (0.1 if status == "confirmed" else 0))
-    return PricePattern(
+    parent = PricePattern(
         pattern="rectangle",
         status=status,
         direction=direction,
@@ -477,22 +533,42 @@ def _rectangle_pattern(
             f"Range width is {width / middle:.2%} ({width / atr_value:.2f} ATR).",
         ],
     )
+    results = [parent]
+    if breakout_index is not None and status == "failed":
+        ctx = FalseBreakContext(
+            breakout_index=breakout_index,
+            direction="bullish" if breakout_index == up_break else "bearish",
+            high_slope=0.0,
+            high_intercept=upper,
+            low_slope=0.0,
+            low_intercept=lower,
+            apex_index=math.inf,
+            buffer=buffer,
+            window_bars=0,
+            parent_pattern="rectangle",
+            target_price=lower if breakout_index == up_break else upper,
+        )
+        apply_parent_side_effects(parent)
+        signal = build_false_break_signal(df, ctx)
+        if signal is not None:
+            results.append(signal)
+    return results
 
 
 def _triangle_pattern(
     df: pd.DataFrame,
     pivots: list[Pivot],
     atr_value: float,
-) -> PricePattern | None:
+) -> list[PricePattern]:
     highs = [pivot for pivot in pivots if pivot.kind == "high"]
     lows = [pivot for pivot in pivots if pivot.kind == "low"]
     if len(highs) < 3 or len(lows) < 3:
-        return None
+        return []
 
     resistance = resistance_line([(pivot.index, pivot.price) for pivot in highs])
     support = support_line([(pivot.index, pivot.price) for pivot in lows])
     if resistance is None or support is None:
-        return None
+        return []
     high_slope, high_intercept = resistance.slope, resistance.intercept
     low_slope, low_intercept = support.slope, support.intercept
     price = float(df["Close"].iloc[-1])
@@ -509,7 +585,7 @@ def _triangle_pattern(
         name = "descending_triangle"
         bias = "bearish"
     else:
-        return None
+        return []
 
     start_index = min(resistance.start_index, support.start_index)
     formation_end = max(resistance.end_index, support.end_index)
@@ -520,14 +596,14 @@ def _triangle_pattern(
     start_gap = start_upper - start_lower
     formation_gap = formation_upper - formation_lower
     if start_gap <= 0 or formation_gap <= 0 or formation_gap >= start_gap * 0.85:
-        return None
+        return []
 
     slope_difference = high_slope - low_slope
     if abs(slope_difference) < 1e-12:
-        return None
+        return []
     apex_index = (low_intercept - high_intercept) / slope_difference
     if apex_index <= formation_end or apex_index <= start_index:
-        return None
+        return []
 
     buffer = atr_value * 0.2
     breakout = classify_triangle_breakout(
@@ -574,7 +650,7 @@ def _triangle_pattern(
     elif status == "failed":
         confidence = min(confidence, 0.5)
     confidence = max(0.2, min(0.95, confidence))
-    return PricePattern(
+    parent = PricePattern(
         pattern=name,
         status=status,
         direction=direction,
@@ -599,6 +675,27 @@ def _triangle_pattern(
         ],
         risk_flags=risk_flags,
     )
+    results = [parent]
+    if "breakout_reversed_back_through_triangle" in risk_flags and breakout_index is not None:
+        ctx = FalseBreakContext(
+            breakout_index=breakout_index,
+            direction=direction,
+            high_slope=high_slope,
+            high_intercept=high_intercept,
+            low_slope=low_slope,
+            low_intercept=low_intercept,
+            apex_index=apex_index,
+            buffer=buffer,
+            window_bars=post_apex_window_bars(start_index, apex_index),
+            parent_pattern=name,
+            parent_risk_flags=tuple(risk_flags),
+            target_price=lower_level if direction == "bullish" else upper_level,
+        )
+        apply_parent_side_effects(parent)
+        signal = build_false_break_signal(df, ctx)
+        if signal is not None:
+            results.append(signal)
+    return results
 
 
 def analyze_chart_patterns_from_data(
@@ -647,12 +744,8 @@ def analyze_chart_patterns_from_data(
 
     patterns = _level_breakout_patterns(df, significant, atr_value)
     patterns.extend(_double_patterns(df, pivots, atr_value, pivot_span))
-    rectangle = _rectangle_pattern(df, pivots, atr_value)
-    if rectangle is not None:
-        patterns.append(rectangle)
-    triangle = _triangle_pattern(df, pivots, atr_value)
-    if triangle is not None:
-        patterns.append(triangle)
+    patterns.extend(_rectangle_pattern(df, pivots, atr_value))
+    patterns.extend(_triangle_pattern(df, pivots, atr_value))
 
     # Keep current/recent setups first and avoid flooding the analyst context.
     status_order = {"confirmed": 0, "forming": 1, "failed": 2}
