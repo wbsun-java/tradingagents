@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from tradingagents.dataflows.double_bottom_emerging import find_emerging_double_bottom
 from tradingagents.dataflows.entry_assessment import assess_entry
 from tradingagents.dataflows.entry_types import EntryAssessment
 from tradingagents.dataflows.false_break_patterns import (
@@ -31,7 +32,7 @@ from tradingagents.dataflows.trendline_fit import resistance_line, support_line
 from tradingagents.dataflows.triangle_breakout import classify_triangle_breakout
 from tradingagents.dataflows.triangle_post_apex import post_apex_window_bars
 
-PatternStatus = Literal["forming", "confirmed", "failed"]
+PatternStatus = Literal["forming", "confirmed", "emerging", "failed"]
 PatternDirection = Literal["bullish", "bearish", "neutral"]
 
 
@@ -750,11 +751,16 @@ def analyze_chart_patterns_from_data(
     patterns.extend(_rectangle_pattern(df, pivots, atr_value))
     patterns.extend(_triangle_pattern(df, pivots, atr_value))
 
+    if not any(pattern.pattern == "double_bottom" for pattern in patterns):
+        emerging = find_emerging_double_bottom(df, pivots, atr_value, pivot_span)
+        if emerging is not None:
+            patterns.append(emerging)
+
     for pattern in patterns:
         pattern.entry_assessment = assess_entry(df, pattern, atr_value, current)
 
     # Keep current/recent setups first and avoid flooding the analyst context.
-    status_order = {"confirmed": 0, "forming": 1, "failed": 2}
+    status_order = {"confirmed": 0, "forming": 1, "emerging": 2, "failed": 3}
     patterns.sort(key=lambda pattern: (status_order[pattern.status], -pattern.confidence))
 
     return {

@@ -112,3 +112,13 @@ def test_sp2_long_signal_passthrough():
               "trigger_price": 101.6}, invalidation=97.5)
     a = assess_entry(_df([101.0] * 21), p, ATR, 101.0)
     assert (a.state, a.direction) == ("false_breakdown_long", "long")
+
+
+@pytest.mark.unit
+def test_emerging_double_bottom_is_predictive_bottom():
+    p = _pat("double_bottom", "emerging", "bullish",
+             {"first_extreme": 95.0, "second_extreme": 95.4, "neckline": 109.6}, invalidation=95.1)
+    a = assess_entry(_df([98.0] * 21), p, ATR, 98.0)
+    assert (a.state, a.direction) == ("predictive_bottom", "long")
+    assert a.trigger_price == pytest.approx(95.0)  # min(first, second)
+    assert a.volume_role == "supporting_not_required"

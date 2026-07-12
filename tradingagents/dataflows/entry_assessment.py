@@ -63,6 +63,11 @@ def assess_entry(df: pd.DataFrame, pattern, atr: float, current_close: float) ->
     if levels is None:
         return _make(OBSERVE, "none", None, None, None, None, "No long-eligible structure.", "not_applicable")
     prox = ENTRY_PROXIMITY_ATR * atr
+    if pattern.status == "emerging":
+        bottom = levels["bottom_boundary"]
+        return _make(PREDICTIVE_BOTTOM, "long", bottom - PREDICTIVE_UNDERSHOOT_ATR * atr,
+                     bottom + prox, bottom, levels["failure_level"],
+                     "Emerging second bottom with a nascent turn-up.", "supporting_not_required")
     if pattern.status == "failed":
         return _make(AVOID, "none", None, None, None, None,
                      f"{name} breakout failed; former boundary no longer reliable.", "not_applicable")
